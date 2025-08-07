@@ -1,21 +1,32 @@
+require('dotenv').config();
 const { Pool } = require('pg');
 const logger = require('../utils/logger');
 
 // Database connection pool
 const pool = new Pool({
   host: process.env.DB_HOST,
-  port: process.env.DB_PORT,
+  port: process.env.DB_PORT || 5432,
   database: process.env.DB_NAME,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
+  ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
   max: 20, // Maximum number of clients in the pool
   idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
-  connectionTimeoutMillis: 2000, // Return an error after 2 seconds if connection could not be established
+  connectionTimeoutMillis: 10000, // Return an error after 10 seconds if connection could not be established
+  acquireTimeoutMillis: 10000, // Return an error after 10 seconds if acquiring a connection times out
 });
 
 // Test database connection
 async function connectDB() {
   try {
+    logger.info('Attempting to connect to database...', {
+      host: process.env.DB_HOST,
+      port: process.env.DB_PORT || 5432,
+      database: process.env.DB_NAME,
+      user: process.env.DB_USER,
+      ssl: process.env.DB_SSL === 'true'
+    });
+    
     const client = await pool.connect();
     const result = await client.query('SELECT NOW()');
     client.release();

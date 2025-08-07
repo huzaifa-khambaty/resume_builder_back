@@ -8,8 +8,8 @@ const cron = require('node-cron');
 require('dotenv').config();
 
 const logger = require('./utils/logger');
-const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
-const { testConnection } = require('./database/connection');
+const { errorHandler, notFound } = require('./middleware/errorHandler');
+const { connectDB } = require('./database/connection');
 const SimulationService = require('./services/simulationService');
 
 // Import routes
@@ -121,7 +121,7 @@ app.use('/api/subscriptions/webhook', express.raw({ type: 'application/json' }))
 // Health check endpoint
 app.get('/health', async (req, res) => {
   try {
-    await testConnection();
+    await connectDB();
     res.json({
       status: 'healthy',
       timestamp: new Date().toISOString(),
@@ -169,22 +169,27 @@ app.get('/', (req, res) => {
 });
 
 // Error handling middleware
-app.use(notFoundHandler);
+app.use(notFound);
 app.use(errorHandler);
 
 // Graceful shutdown handler
+let server;
 const gracefulShutdown = (signal) => {
   logger.info(`Received ${signal}. Starting graceful shutdown...`);
   
-  server.close(() => {
-    logger.info('HTTP server closed');
-    
-    // Close database connections
-    // Note: pg pool will close automatically when process exits
-    
-    logger.info('Graceful shutdown completed');
+  if (server) {
+    server.close(() => {
+      logger.info('HTTP server closed');
+      
+      // Close database connections
+      // Note: pg pool will close automatically when process exits
+      
+      logger.info('Graceful shutdown completed');
+      process.exit(0);
+    });
+  } else {
     process.exit(0);
-  });
+  }
   
   // Force close after 30 seconds
   setTimeout(() => {
@@ -237,10 +242,10 @@ cron.schedule('0 2 * * *', async () => {
 });
 
 // Start server
-const server = app.listen(PORT, async () => {
+server = app.listen(PORT, async () => {
   try {
     // Test database connection on startup
-    await testConnection();
+    await connectDB();
     logger.info(`✅ Database connection established`);
     
     logger.info(`🚀 NextMatch AI Backend started successfully`);
