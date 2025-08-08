@@ -4,21 +4,9 @@ const cors = require("cors");
 const express = require("express");
 const sequelize = require("./config/sequelize"); // sequelize instance
 const router = require("./routes");
-const logger = require("./config/logger");
 const errorHandler = require("./middlewares/errorHandler.middleware");
 
 const app = express();
-
-// HTTP request logging middleware
-app.use((req, res, next) => {
-  logger.http(`${req.method} ${req.url}`, {
-    method: req.method,
-    url: req.url,
-    ip: req.ip,
-    userAgent: req.get("User-Agent"),
-  });
-  next();
-});
 
 // Middlewares
 app.use(cors()); // enable cors
@@ -34,16 +22,12 @@ const PORT = process.env.PORT || 3000;
 async function bootstrap() {
   try {
     await sequelize.authenticate(); // database connection
-    logger.info("Database connection established successfully");
-
+    console.log("Database connection established successfully");
     app.listen(PORT, () => {
-      logger.info(`Server is running on port ${PORT}`);
+      console.log(`Server is running on port ${PORT}`);
     });
   } catch (error) {
-    logger.error("Unable to connect to the database:", {
-      message: error.message,
-      stack: error.stack,
-    });
+    console.error("Unable to connect to the database:", error);
     process.exit(1);
   }
 }
