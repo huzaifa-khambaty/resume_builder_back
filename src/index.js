@@ -5,12 +5,16 @@ const express = require("express");
 const sequelize = require("./config/sequelize"); // sequelize instance
 const router = require("./routes");
 const errorHandler = require("./middlewares/errorHandler.middleware");
+const passport = require("passport");
+require("./config/passport");
 
 const app = express();
 
 // Middlewares
 app.use(cors()); // enable cors
 app.use(express.json()); // parse JSON request body
+app.use(passport.initialize());
+// app.use(passport.session());
 
 // Routes
 app.use("/api", router);

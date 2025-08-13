@@ -24,6 +24,14 @@ module.exports = {
         type: DataTypes.STRING,
         allowNull: false,
       },
+      country_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
+      seniority_level: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
       is_active: {
         type: DataTypes.BOOLEAN,
         defaultValue: true,
