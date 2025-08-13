@@ -1,7 +1,5 @@
-const { DataTypes } = require("sequelize");
-const sequelize = require("../config/sequelize");
-
-const JobCategory = sequelize.define(
+module.exports = (sequelize, DataTypes) => {
+  const JobCategory = sequelize.define(
   "JobCategory",
   {
     job_category_id: {
@@ -33,5 +31,5 @@ const JobCategory = sequelize.define(
     underscored: true,
   }
 );
-
-module.exports = JobCategory;
+  return JobCategory;
+};

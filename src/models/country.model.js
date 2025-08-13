@@ -1,7 +1,5 @@
-const { DataTypes } = require("sequelize");
-const sequelize = require("../config/sequelize");
-
-const Country = sequelize.define(
+module.exports = (sequelize, DataTypes) => {
+  const Country = sequelize.define(
   "Country",
   {
     country_id: {
@@ -38,5 +36,5 @@ const Country = sequelize.define(
     underscored: true,
   }
 );
-
-module.exports = Country;
+  return Country;
+};
