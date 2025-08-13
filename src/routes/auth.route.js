@@ -13,13 +13,15 @@ router.post("/login", login);
 router.post("/register", register);
 
 // Google
-router.get(
-  "/google",
-  passport.authenticate("google", {
+// Initiate Google OAuth; allow ?format=json to request JSON in callback via OAuth state
+router.get("/google", (req, res, next) => {
+  const wantsJson = req.query.format === "json";
+  return passport.authenticate("google", {
     session: false,
     scope: ["profile", "email"],
-  })
-);
+    state: wantsJson ? "json" : undefined,
+  })(req, res, next);
+});
 
 router.get(
   "/google/callback",

@@ -1,5 +1,9 @@
 const jwt = require("jsonwebtoken");
-const { findCandidateByEmail, createCandidate, saveApiToken } = require("../services/candidate.service");
+const {
+  findCandidateByEmail,
+  createCandidate,
+  saveApiToken,
+} = require("../services/candidate.service");
 const { validateOAuthProfile } = require("../validations/auth.validation");
 
 const jwtSecret = process.env.JWT_SECRET;
@@ -31,7 +35,9 @@ async function oauthHandler(req, res) {
     const profile = req.user || {};
     const { valid, errors, cleaned } = validateOAuthProfile(profile);
     if (!valid) {
-      return res.status(400).json({ success: false, message: "Invalid OAuth profile", errors });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid OAuth profile", errors });
     }
 
     const { email, name, image_url } = cleaned;
@@ -43,17 +49,27 @@ async function oauthHandler(req, res) {
     }
 
     // create JWT
-    const payload = { candidate_id: candidate.candidate_id, email: candidate.email, name: candidate.full_name };
+    const payload = {
+      candidate_id: candidate.candidate_id,
+      email: candidate.email,
+      name: candidate.full_name,
+    };
     const token = jwt.sign(payload, jwtSecret, { expiresIn: jwtExpiresIn });
 
     // persist token for reference
     await saveApiToken(candidate.candidate_id, token);
 
     // redirect to frontend with token
-    return res.redirect(`${frontendUrl}/login-success?token=${encodeURIComponent(token)}`);
+    return res.redirect(
+      `${frontendUrl}/login-success?token=${encodeURIComponent(token)}`
+    );
   } catch (err) {
     // fallback to JSON to aid debugging
-    return res.status(500).json({ success: false, message: "OAuth login failed", error: err.message });
+    return res.status(500).json({
+      success: false,
+      message: "OAuth login failed",
+      error: err.message,
+    });
   }
 }
 

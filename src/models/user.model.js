@@ -28,7 +28,7 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: true,
       },
       api_token: {
-        type: DataTypes.STRING,
+        type: DataTypes.TEXT,
         allowNull: true,
       },
       created_by: {
