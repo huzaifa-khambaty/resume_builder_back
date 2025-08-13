@@ -30,6 +30,25 @@ async function createCandidate(data) {
 }
 
 /**
+ * Create a new candidate with a plaintext password (will be hashed here)
+ * Ensures created_by is populated (set to the new candidate_id)
+ * @param {{ email: string, full_name: string, password: string }} data
+ * @returns {Promise<Candidate>}
+ */
+async function createCandidateWithPassword(data) {
+  const candidateId = uuidv4();
+  const hashed = await bcrypt.hash(data.password, 10);
+  const payload = {
+    candidate_id: candidateId,
+    email: data.email,
+    full_name: data.full_name,
+    password: hashed,
+    created_by: candidateId,
+  };
+  return Candidate.create(payload);
+}
+
+/**
  * Persist API token to candidate
  * @param {string} candidateId
  * @param {string} token
@@ -59,12 +78,19 @@ async function list(options = {}) {
       page: options.page,
       limit: options.limit,
       search: options.search,
-      sortBy: options.sortBy || 'created_at',
-      sortOrder: options.sortOrder || 'DESC',
-      attributes: ['candidate_id', 'email', 'full_name', 'image_url', 'created_at', 'updated_at'],
-      searchableFields: ['full_name', 'email'],
-      allowedSortFields: ['full_name', 'email', 'created_at', 'updated_at'],
-      path: '/api/candidates'
+      sortBy: options.sortBy || "created_at",
+      sortOrder: options.sortOrder || "DESC",
+      attributes: [
+        "candidate_id",
+        "email",
+        "full_name",
+        "image_url",
+        "created_at",
+        "updated_at",
+      ],
+      searchableFields: ["full_name", "email"],
+      allowedSortFields: ["full_name", "email", "created_at", "updated_at"],
+      path: "/api/candidates",
     });
 
     return result;
@@ -76,6 +102,7 @@ async function list(options = {}) {
 module.exports = {
   findCandidateByEmail,
   createCandidate,
+  createCandidateWithPassword,
   saveApiToken,
   list,
 };
