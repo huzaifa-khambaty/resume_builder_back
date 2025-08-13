@@ -1,6 +1,7 @@
 const { v4: uuidv4 } = require("uuid");
 const { Candidate } = require("../models");
 const PaginationService = require("./pagination.service");
+const bcrypt = require("bcryptjs");
 
 /**
  * Find candidate by email

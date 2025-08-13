@@ -4,6 +4,7 @@ const {
   register,
   googleLogin,
   facebookLogin,
+  verifyEmail,
 } = require("../controllers/auth.controller");
 const router = express.Router();
 const passport = require("passport");
@@ -11,6 +12,7 @@ const jwt = require("jsonwebtoken");
 
 router.post("/login", login);
 router.post("/register", register);
+router.get("/verify", verifyEmail);
 
 // Google
 // Initiate Google OAuth; allow ?format=json to request JSON in callback via OAuth state
