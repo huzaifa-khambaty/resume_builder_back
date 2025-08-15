@@ -14,7 +14,6 @@ const app = express();
 app.use(cors()); // enable cors
 app.use(express.json()); // parse JSON request body
 app.use(passport.initialize());
-// app.use(passport.session());
 
 // Routes
 app.use("/api", router);

@@ -63,6 +63,20 @@ async function saveApiToken(candidateId, token) {
 }
 
 /**
+ * Revoke API token if it matches the provided token
+ * @param {string} candidateId
+ * @param {string} token
+ * @returns {Promise<boolean>} true if a token was revoked
+ */
+async function revokeApiToken(candidateId, token) {
+  const [affected] = await Candidate.update(
+    { api_token: null },
+    { where: { candidate_id: candidateId, api_token: token } }
+  );
+  return affected > 0;
+}
+
+/**
  * Get all candidates with pagination and search
  * @param {Object} options - Query options
  * @param {number} options.page - Page number (default: 1, min: 1)
@@ -105,5 +119,6 @@ module.exports = {
   createCandidate,
   createCandidateWithPassword,
   saveApiToken,
+  revokeApiToken,
   list,
 };

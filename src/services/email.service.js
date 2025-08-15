@@ -1,4 +1,6 @@
+require("dotenv").config(); // load environment variables
 const nodemailer = require("nodemailer");
+const { renderTemplate } = require("../emails/templateRenderer");
 
 const smtpHost = process.env.SMTP_HOST;
 const smtpPort = Number(process.env.SMTP_PORT || 587);
@@ -18,7 +20,9 @@ function ensureEmailConfig() {
       .filter(([, v]) => v)
       .map(([k]) => k);
     throw new Error(
-      `Email configuration missing: ${missingKeys.join(", ")}. Please set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS.`
+      `Email configuration missing: ${missingKeys.join(
+        ", "
+      )}. Please set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS.`
     );
   }
 }
@@ -46,15 +50,20 @@ async function sendMail({ to, subject, html, text }) {
 }
 
 async function sendVerificationEmail({ to, name, verifyUrl, expiresIn }) {
-  const subject = "Verify your email";
-  const text = `Hi ${name || "there"},\n\nPlease verify your email by clicking the link below:\n${verifyUrl}\n\nThis link expires in ${expiresIn}.\nIf you did not request this, you can ignore this email.`;
-  const html = `
-    <p>Hi ${name || "there"},</p>
-    <p>Please verify your email by clicking the link below:</p>
-    <p><a href="${verifyUrl}">Verify Email</a></p>
-    <p>This link expires in ${expiresIn}.</p>
-    <p>If you did not request this, you can ignore this email.</p>
-  `;
+  const appName = process.env.APP_NAME || "Next Match";
+  const subject = `${appName} • Verify your email`;
+  const text = `Hi ${
+    name || "there"
+  },\n\nPlease verify your email by clicking the link below:\n${verifyUrl}\n\nThis link expires in ${expiresIn}.\nIf you did not request this, you can ignore this email.`;
+  const html = renderTemplate("verification", {
+    appName,
+    footerNote:
+      process.env.EMAIL_FOOTER_NOTE || `${appName} • All rights reserved`,
+    year: new Date().getFullYear(),
+    name: name || "there",
+    verifyUrl,
+    expiresIn,
+  });
   return sendMail({ to, subject, text, html });
 }
 

@@ -5,6 +5,7 @@ const {
   createCandidate,
   createCandidateWithPassword,
   saveApiToken,
+  revokeApiToken,
 } = require("../services/candidate.service");
 const { sendVerificationEmail } = require("../services/email.service");
 const {
@@ -264,10 +265,44 @@ const googleLogin = (req, res) => oauthHandler(req, res);
 
 const facebookLogin = (req, res) => oauthHandler(req, res);
 
+// POST /api/auth/logout
+async function logout(req, res) {
+  try {
+    const auth = req.headers["authorization"] || "";
+    if (!auth.startsWith("Bearer ")) {
+      return res.status(401).json({ success: false, message: "Missing or invalid Authorization header" });
+    }
+
+    const token = auth.substring("Bearer ".length).trim();
+    if (!token) {
+      return res.status(401).json({ success: false, message: "Missing token" });
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(token, jwtSecret);
+    } catch (e) {
+      // Even if token is invalid/expired, respond success to prevent token fishing
+      return res.status(200).json({ success: true, message: "Logged out" });
+    }
+
+    const candidateId = decoded?.candidate_id;
+    if (!candidateId) {
+      return res.status(200).json({ success: true, message: "Logged out" });
+    }
+
+    await revokeApiToken(candidateId, token);
+    return res.status(200).json({ success: true, message: "Logged out" });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: "Logout failed", error: err.message });
+  }
+}
+
 module.exports = {
   login,
   register,
   googleLogin,
   facebookLogin,
   verifyEmail,
+  logout,
 };
