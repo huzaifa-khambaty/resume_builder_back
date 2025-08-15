@@ -2,10 +2,10 @@ const express = require("express");
 const router = express.Router();
 
 const authRoute = require("./auth.route");
-const countriesRoute = require("./countries.route");
+const lookupRoute = require("./lookup.route");
 
 router.use("/auth", authRoute);
-router.use("/countries", countriesRoute);
+router.use("/lookup", lookupRoute);
 router.get("/health", (req, res) => {
   res.json({ status: "ok", message: "Server is running!!!" });
 });
