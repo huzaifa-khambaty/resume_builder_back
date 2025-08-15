@@ -50,6 +50,15 @@ async function createCandidateWithPassword(data) {
 }
 
 /**
+ * Find candidate by candidate_id
+ * @param {string} candidateId
+ * @returns {Promise<Candidate|null>}
+ */
+async function findCandidateById(candidateId) {
+  return Candidate.findOne({ where: { candidate_id: candidateId } });
+}
+
+/**
  * Persist API token to candidate
  * @param {string} candidateId
  * @param {string} token
@@ -118,6 +127,7 @@ module.exports = {
   findCandidateByEmail,
   createCandidate,
   createCandidateWithPassword,
+  findCandidateById,
   saveApiToken,
   revokeApiToken,
   list,

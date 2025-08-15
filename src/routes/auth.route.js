@@ -5,14 +5,17 @@ const {
   googleLogin,
   facebookLogin,
   verifyEmail,
+  me,
   logout,
 } = require("../controllers/auth.controller");
 const router = express.Router();
 const passport = require("passport");
+const { checkAuth } = require("../middlewares/auth.middleware");
 
 router.post("/login", login);
 router.post("/register", register);
 router.get("/verify", verifyEmail);
+router.get("/me", checkAuth, me);
 router.post("/logout", logout);
 
 // Google

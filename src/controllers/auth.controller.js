@@ -118,7 +118,8 @@ async function register(req, res) {
     });
 
     // Build verification URL
-    const backendBase = process.env.BACKEND_URL || `${req.protocol}://${req.get("host")}`;
+    const backendBase =
+      process.env.BACKEND_URL || `${req.protocol}://${req.get("host")}`;
     const verifyUrl = `${backendBase}/api/auth/verify?token=${encodeURIComponent(
       oneTimeToken
     )}`;
@@ -133,7 +134,8 @@ async function register(req, res) {
 
     return res.status(200).json({
       success: true,
-      message: "Verification email sent. Please check your inbox to verify your email.",
+      message:
+        "Verification email sent. Please check your inbox to verify your email.",
     });
   } catch (err) {
     return res.status(500).json({
@@ -183,7 +185,11 @@ async function verifyEmail(req, res) {
     // If already exists, just issue final JWT
     let candidate = await findCandidateByEmail(email);
     if (!candidate) {
-      candidate = await createCandidateWithPassword({ full_name, email, password });
+      candidate = await createCandidateWithPassword({
+        full_name,
+        email,
+        password,
+      });
     }
 
     const payload = {
@@ -191,11 +197,15 @@ async function verifyEmail(req, res) {
       email: candidate.email,
       name: candidate.full_name,
     };
-    const finalToken = jwt.sign(payload, jwtSecret, { expiresIn: jwtExpiresIn });
+    const finalToken = jwt.sign(payload, jwtSecret, {
+      expiresIn: jwtExpiresIn,
+    });
     await saveApiToken(candidate.candidate_id, finalToken);
 
     // Redirect to frontend with token
-    const redirectUrl = `${frontendUrl}/verified?token=${encodeURIComponent(finalToken)}`;
+    const redirectUrl = `${frontendUrl}/verified?token=${encodeURIComponent(
+      finalToken
+    )}`;
     return res.redirect(302, redirectUrl);
   } catch (err) {
     return res.status(500).json({
@@ -265,12 +275,36 @@ const googleLogin = (req, res) => oauthHandler(req, res);
 
 const facebookLogin = (req, res) => oauthHandler(req, res);
 
+// GET /api/auth/me
+// Returns current candidate based on Bearer token
+async function me(req, res) {
+  try {
+    // If checkAuth middleware already attached candidate, use it directly
+    const { password, api_token, ...candidate } = req.candidate;
+    return res.status(200).json({
+      success: true,
+      data: {
+        ...candidate,
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch current user",
+      error: err.message,
+    });
+  }
+}
+
 // POST /api/auth/logout
 async function logout(req, res) {
   try {
     const auth = req.headers["authorization"] || "";
     if (!auth.startsWith("Bearer ")) {
-      return res.status(401).json({ success: false, message: "Missing or invalid Authorization header" });
+      return res.status(401).json({
+        success: false,
+        message: "Missing or invalid Authorization header",
+      });
     }
 
     const token = auth.substring("Bearer ".length).trim();
@@ -294,7 +328,9 @@ async function logout(req, res) {
     await revokeApiToken(candidateId, token);
     return res.status(200).json({ success: true, message: "Logged out" });
   } catch (err) {
-    return res.status(500).json({ success: false, message: "Logout failed", error: err.message });
+    return res
+      .status(500)
+      .json({ success: false, message: "Logout failed", error: err.message });
   }
 }
 
@@ -304,5 +340,6 @@ module.exports = {
   googleLogin,
   facebookLogin,
   verifyEmail,
+  me,
   logout,
 };
