@@ -9,7 +9,6 @@ const {
 } = require("../services/candidate.service");
 const {
   findUserByEmail,
-  findUserById,
   saveApiToken: saveUserApiToken,
   revokeApiToken: revokeUserApiToken,
 } = require("../services/user.service");
