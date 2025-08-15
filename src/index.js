@@ -13,7 +13,7 @@ const app = express();
 // Middlewares
 app.use(cors()); // enable cors
 app.use(express.json()); // parse JSON request body
-app.use(passport.initialize());
+app.use(passport.initialize()); // initialize passport
 
 // Routes
 app.use("/api", router);

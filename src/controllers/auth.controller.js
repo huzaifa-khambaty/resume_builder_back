@@ -17,18 +17,18 @@ const {
 const jwtSecret = process.env.JWT_SECRET;
 const jwtExpiresIn = process.env.JWT_EXPIRES_IN;
 const frontendUrl = process.env.FRONTEND_URL;
-const emailTokenSecret = process.env.EMAIL_TOKEN_SECRET || jwtSecret;
-const emailTokenExpiresIn = process.env.EMAIL_TOKEN_EXPIRES_IN || "15m";
+const emailVerificationExpiresIn = process.env.EMAIL_VERIFICATION_EXPIRES_IN;
 
 async function login(req, res) {
   try {
-    if (!jwtSecret || !jwtExpiresIn) {
+    if (!jwtSecret || !jwtExpiresIn || !emailVerificationExpiresIn) {
       return res.status(500).json({
         success: false,
         message: "Server auth configuration missing",
         missing: {
           JWT_SECRET: !jwtSecret,
           JWT_EXPIRES_IN: !jwtExpiresIn,
+          EMAIL_VERIFICATION_EXPIRES_IN: !emailVerificationExpiresIn,
         },
       });
     }
@@ -68,12 +68,10 @@ async function login(req, res) {
       message: "Login successful",
       data: {
         token,
-        candidate: {
-          candidate_id: candidate.candidate_id,
-          email: candidate.email,
-          full_name: candidate.full_name,
-          image_url: candidate.image_url || null,
-        },
+        candidate_id: candidate.candidate_id,
+        email: candidate.email,
+        full_name: candidate.full_name,
+        image_url: candidate.image_url || null,
       },
     });
   } catch (err) {
@@ -85,13 +83,14 @@ async function login(req, res) {
 
 async function register(req, res) {
   try {
-    if (!jwtSecret || !jwtExpiresIn) {
+    if (!jwtSecret || !jwtExpiresIn || !emailVerificationExpiresIn) {
       return res.status(500).json({
         success: false,
         message: "Server auth configuration missing",
         missing: {
           JWT_SECRET: !jwtSecret,
           JWT_EXPIRES_IN: !jwtExpiresIn,
+          EMAIL_VERIFICATION_EXPIRES_IN: !emailVerificationExpiresIn,
         },
       });
     }
@@ -113,8 +112,8 @@ async function register(req, res) {
 
     // Create one-time verification token with signup data
     const emailPayload = { full_name, email, password };
-    const oneTimeToken = jwt.sign(emailPayload, emailTokenSecret, {
-      expiresIn: emailTokenExpiresIn,
+    const oneTimeToken = jwt.sign(emailPayload, jwtSecret, {
+      expiresIn: emailVerificationExpiresIn,
     });
 
     // Build verification URL
@@ -129,7 +128,7 @@ async function register(req, res) {
       to: email,
       name: full_name,
       verifyUrl,
-      expiresIn: emailTokenExpiresIn,
+      expiresIn: emailExpiresIn,
     });
 
     return res.status(200).json({
@@ -168,7 +167,7 @@ async function verifyEmail(req, res) {
 
     let decoded;
     try {
-      decoded = jwt.verify(token, emailTokenSecret);
+      decoded = jwt.verify(token, jwtSecret);
     } catch (e) {
       return res
         .status(400)
@@ -299,31 +298,15 @@ async function me(req, res) {
 // POST /api/auth/logout
 async function logout(req, res) {
   try {
-    const auth = req.headers["authorization"] || "";
-    if (!auth.startsWith("Bearer ")) {
+    if (!req.candidate || !req.token) {
       return res.status(401).json({
         success: false,
         message: "Missing or invalid Authorization header",
       });
     }
 
-    const token = auth.substring("Bearer ".length).trim();
-    if (!token) {
-      return res.status(401).json({ success: false, message: "Missing token" });
-    }
-
-    let decoded;
-    try {
-      decoded = jwt.verify(token, jwtSecret);
-    } catch (e) {
-      // Even if token is invalid/expired, respond success to prevent token fishing
-      return res.status(200).json({ success: true, message: "Logged out" });
-    }
-
-    const candidateId = decoded?.candidate_id;
-    if (!candidateId) {
-      return res.status(200).json({ success: true, message: "Logged out" });
-    }
+    const candidateId = req.candidate.candidate_id;
+    const token = req.token;
 
     await revokeApiToken(candidateId, token);
     return res.status(200).json({ success: true, message: "Logged out" });

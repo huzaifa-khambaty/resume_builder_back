@@ -16,7 +16,7 @@ router.post("/login", login);
 router.post("/register", register);
 router.get("/verify", verifyEmail);
 router.get("/me", checkAuth, me);
-router.post("/logout", logout);
+router.post("/logout", checkAuth, logout);
 
 // Google
 // Initiate Google OAuth; allow ?format=json to request JSON in callback via OAuth state

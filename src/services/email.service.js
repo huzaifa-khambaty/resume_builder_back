@@ -14,15 +14,16 @@ function ensureEmailConfig() {
     SMTP_PORT: !process.env.SMTP_PORT,
     SMTP_USER: !smtpUser,
     SMTP_PASS: !smtpPass,
+    FROM_EMAIL: !fromEmail,
   };
-  if (!smtpHost || !smtpUser || !smtpPass) {
+  if (!smtpHost || !smtpUser || !smtpPass || !fromEmail) {
     const missingKeys = Object.entries(missing)
       .filter(([, v]) => v)
       .map(([k]) => k);
     throw new Error(
       `Email configuration missing: ${missingKeys.join(
         ", "
-      )}. Please set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS.`
+      )}. Please set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, FROM_EMAIL.`
     );
   }
 }

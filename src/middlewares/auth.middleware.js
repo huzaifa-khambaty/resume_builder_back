@@ -53,9 +53,7 @@ async function checkAuth(req, res, next) {
     }
 
     if (candidate.api_token !== token) {
-      return res
-        .status(401)
-        .json({ success: false, message: "Token has been revoked" });
+      return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
     req.candidate = { ...candidate.dataValues };
