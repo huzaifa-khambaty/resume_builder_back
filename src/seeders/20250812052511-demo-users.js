@@ -14,37 +14,13 @@ module.exports = {
       [
         {
           user_id: adminUserId,
-          email: "admin@example.com",
-          password: bcrypt.hashSync("password", saltRounds), // Should be pre-hashed
+          email: "admin@gmail.com",
+          password: bcrypt.hashSync("12345678", saltRounds), // Should be pre-hashed
           full_name: "Admin User",
           is_active: true,
           api_token: null,
           created_by: adminUserId, // Self-created
           updated_by: null,
-          created_at: new Date(),
-          updated_at: new Date(),
-        },
-        {
-          user_id: uuidv4(),
-          email: "john.doe@example.com",
-          password: bcrypt.hashSync("password", saltRounds),
-          full_name: "John Doe",
-          is_active: true,
-          api_token: null,
-          created_by: adminUserId,
-          updated_by: null,
-          created_at: new Date(),
-          updated_at: new Date(),
-        },
-        {
-          user_id: uuidv4(),
-          email: "jane.smith@example.com",
-          password: bcrypt.hashSync("password", saltRounds),
-          full_name: "Jane Smith",
-          is_active: false,
-          api_token: null,
-          created_by: adminUserId,
-          updated_by: adminUserId,
           created_at: new Date(),
           updated_at: new Date(),
         },

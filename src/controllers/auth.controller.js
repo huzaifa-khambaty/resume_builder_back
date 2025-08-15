@@ -7,6 +7,12 @@ const {
   saveApiToken,
   revokeApiToken,
 } = require("../services/candidate.service");
+const {
+  findUserByEmail,
+  findUserById,
+  saveApiToken: saveUserApiToken,
+  revokeApiToken: revokeUserApiToken,
+} = require("../services/user.service");
 const { sendVerificationEmail } = require("../services/email.service");
 const {
   validateOAuthProfile,
@@ -317,6 +323,104 @@ async function logout(req, res) {
   }
 }
 
+// --- Admin (User) Auth Handlers ---
+// POST /api/auth/admin/login
+async function adminLogin(req, res) {
+  try {
+    if (!jwtSecret || !jwtExpiresIn) {
+      return res.status(500).json({
+        success: false,
+        message: "Server auth configuration missing",
+        missing: { JWT_SECRET: !jwtSecret, JWT_EXPIRES_IN: !jwtExpiresIn },
+      });
+    }
+
+    const { valid, errors, cleaned } = validateFormLogin(req.body || {});
+    if (!valid) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid login data", errors });
+    }
+
+    const { email, password } = cleaned;
+    const user = await findUserByEmail(email);
+    if (!user || !user.password) {
+      return res
+        .status(401)
+        .json({ success: false, message: "Invalid email or password" });
+    }
+
+    const ok = await bcrypt.compare(password, user.password);
+    if (!ok) {
+      return res
+        .status(401)
+        .json({ success: false, message: "Invalid email or password" });
+    }
+
+    const payload = {
+      user_id: user.user_id,
+      email: user.email,
+      name: user.full_name,
+      role: "admin",
+    };
+    const token = jwt.sign(payload, jwtSecret, { expiresIn: jwtExpiresIn });
+    await saveUserApiToken(user.user_id, token);
+
+    return res.status(200).json({
+      success: true,
+      message: "Login successful",
+      data: {
+        token,
+        user_id: user.user_id,
+        email: user.email,
+        full_name: user.full_name,
+      },
+    });
+  } catch (err) {
+    return res
+      .status(500)
+      .json({ success: false, message: "Login failed", error: err.message });
+  }
+}
+
+// GET /api/auth/admin/me
+async function adminMe(req, res) {
+  try {
+    const { password, api_token, ...admin } = req.admin;
+    return res.status(200).json({ success: true, data: { ...admin } });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch current admin",
+      error: err.message,
+    });
+  }
+}
+
+// POST /api/auth/admin/logout
+async function adminLogout(req, res) {
+  try {
+    if (!req.admin || !req.token) {
+      return res.status(401).json({
+        success: false,
+        message: "Missing or invalid Authorization header",
+      });
+    }
+
+    const userId = req.admin.user_id;
+    const token = req.token;
+
+    await revokeUserApiToken(userId, token);
+    return res.status(200).json({ success: true, message: "Logged out" });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      message: "Logout failed",
+      error: err.message,
+    });
+  }
+}
+
 module.exports = {
   login,
   register,
@@ -325,4 +429,7 @@ module.exports = {
   verifyEmail,
   me,
   logout,
+  adminLogin,
+  adminMe,
+  adminLogout,
 };

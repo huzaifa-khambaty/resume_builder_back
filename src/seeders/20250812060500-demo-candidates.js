@@ -14,8 +14,8 @@ module.exports = {
       [
         {
           candidate_id: primaryCandidateId,
-          email: "alice.candidate@example.com",
-          password: bcrypt.hashSync("password", saltRounds),
+          email: "alice.candidate@gmail.com",
+          password: bcrypt.hashSync("12345678", saltRounds),
           full_name: "Alice Candidate",
           country_id: null,
           seniority_level: null,
@@ -58,8 +58,8 @@ module.exports = {
         },
         {
           candidate_id: uuidv4(),
-          email: "bob.candidate@example.com",
-          password: bcrypt.hashSync("password", saltRounds),
+          email: "bob.candidate@gmail.com",
+          password: bcrypt.hashSync("12345678", saltRounds),
           full_name: "Bob Candidate",
           country_id: null,
           seniority_level: null,
