@@ -59,6 +59,34 @@ async function findCandidateById(candidateId) {
 }
 
 /**
+ * Update candidate by id with allowed fields only
+ * @param {string} candidateId
+ * @param {Object} data
+ * @returns {Promise<Candidate>}
+ */
+async function updateCandidateById(candidateId, data) {
+  const allowed = {
+    full_name: data.full_name,
+    country_id: data.country_id,
+    seniority_level: data.seniority_level,
+    image_url: data.image_url,
+    resume_url: data.resume_url,
+    job_category_id: data.job_category_id,
+    skills: data.skills,
+    work_experience: data.work_experience,
+    education: data.education,
+    updated_by: data.updated_by,
+  };
+  // Remove undefined keys
+  Object.keys(allowed).forEach((k) =>
+    allowed[k] === undefined ? delete allowed[k] : null
+  );
+
+  await Candidate.update(allowed, { where: { candidate_id: candidateId } });
+  return findCandidateById(candidateId);
+}
+
+/**
  * Persist API token to candidate
  * @param {string} candidateId
  * @param {string} token
@@ -131,4 +159,5 @@ module.exports = {
   saveApiToken,
   revokeApiToken,
   list,
+  updateCandidateById,
 };

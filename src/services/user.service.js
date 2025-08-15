@@ -1,4 +1,3 @@
-const { v4: uuidv4 } = require("uuid");
 const { User } = require("../models");
 
 /**
@@ -17,6 +16,25 @@ async function findUserByEmail(email) {
  */
 async function findUserById(userId) {
   return User.findOne({ where: { user_id: userId } });
+}
+
+/**
+ * Update user (admin) by id with allowed fields only
+ * @param {string} userId
+ * @param {Object} data
+ * @returns {Promise<User>}
+ */
+async function updateUserById(userId, data) {
+  const allowed = {
+    full_name: data.full_name,
+    updated_by: data.updated_by,
+  };
+  Object.keys(allowed).forEach((k) =>
+    allowed[k] === undefined ? delete allowed[k] : null
+  );
+
+  await User.update(allowed, { where: { user_id: userId } });
+  return findUserById(userId);
 }
 
 /**
@@ -48,4 +66,5 @@ module.exports = {
   findUserById,
   saveApiToken,
   revokeApiToken,
+  updateUserById,
 };
