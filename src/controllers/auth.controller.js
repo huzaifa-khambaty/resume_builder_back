@@ -133,7 +133,7 @@ async function register(req, res) {
       to: email,
       name: full_name,
       verifyUrl,
-      expiresIn: emailExpiresIn,
+      expiresIn: emailVerificationExpiresIn,
     });
 
     return res.status(200).json({
