@@ -7,58 +7,68 @@ const { z } = require("zod");
  * @returns {{ valid: boolean, errors?: any[], cleaned?: { email: string, name: string, image_url?: string } }}
  */
 function validateOAuthProfile(profile) {
-  const errors = [];
+  const email = extractEmail(profile);
+  const name = extractName(profile);
+  const image_url = extractImageUrl(profile);
 
-  const email =
-    (profile &&
-      (profile.email ||
-        (Array.isArray(profile.emails) &&
-          profile.emails[0] &&
-          profile.emails[0].value) ||
-        (profile._json && profile._json.email))) ||
-    "";
+  const parsed = oauthCleanSchema.safeParse({ email, name, image_url });
+  if (!parsed.success) {
+    const flat = parsed.error.flatten();
+    const errors = Object.entries(flat.fieldErrors).flatMap(([field, msgs]) =>
+      (msgs || []).map((message) => ({ field, message }))
+    );
+    return { valid: false, errors };
+  }
 
-  const name =
-    (profile &&
-      (profile.displayName ||
-        (profile.name && typeof profile.name === "string" && profile.name) ||
-        (profile.name &&
-          typeof profile.name === "object" &&
-          [profile.name.givenName, profile.name.familyName]
-            .filter(Boolean)
-            .join(" ")) ||
-        (profile._json &&
-          (profile._json.name ||
-            [profile._json.given_name, profile._json.family_name]
-              .filter(Boolean)
-              .join(" "))))) ||
-    "";
-
-  const image_url =
-    (profile &&
-      (profile.picture ||
-        (Array.isArray(profile.photos) &&
-          profile.photos[0] &&
-          (profile.photos[0].value || profile.photos[0].url)) ||
-        (profile._json &&
-          (profile._json.picture || profile._json.avatar_url)))) ||
-    undefined;
-
-  if (!email)
-    errors.push({
-      field: "email",
-      message: "Email is required from OAuth provider",
-    });
-  if (!name)
-    errors.push({
-      field: "name",
-      message: "Name is required from OAuth provider",
-    });
-
-  if (errors.length) return { valid: false, errors };
-
-  return { valid: true, cleaned: { email, name, image_url } };
+  return { valid: true, cleaned: parsed.data };
 }
+
+// Helpers to normalize common Passport profile shapes
+function extractEmail(profile) {
+  if (!profile) return "";
+  if (profile.email) return String(profile.email);
+  if (Array.isArray(profile.emails) && profile.emails[0]?.value)
+    return String(profile.emails[0].value);
+  if (profile._json?.email) return String(profile._json.email);
+  return "";
+}
+
+function extractName(profile) {
+  if (!profile) return "";
+  if (profile.displayName) return String(profile.displayName);
+  if (profile.name && typeof profile.name === "string") return profile.name;
+  if (profile.name && typeof profile.name === "object") {
+    const parts = [profile.name.givenName, profile.name.familyName].filter(Boolean);
+    if (parts.length) return parts.join(" ");
+  }
+  if (profile._json) {
+    if (profile._json.name) return String(profile._json.name);
+    const parts = [profile._json.given_name, profile._json.family_name].filter(Boolean);
+    if (parts.length) return parts.join(" ");
+  }
+  return "";
+}
+
+function extractImageUrl(profile) {
+  if (!profile) return undefined;
+  if (profile.picture) return String(profile.picture);
+  if (Array.isArray(profile.photos) && profile.photos[0])
+    return String(profile.photos[0].value || profile.photos[0].url);
+  if (profile._json?.picture) return String(profile._json.picture);
+  if (profile._json?.avatar_url) return String(profile._json.avatar_url);
+  return undefined;
+}
+
+// Zod schema for normalized OAuth output
+const oauthCleanSchema = z.object({
+  email: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .email("Invalid email from OAuth provider"),
+  name: z.string().trim().min(1, "Name is required from OAuth provider"),
+  image_url: z.string().url().optional(),
+});
 
 // Zod schemas for form-based auth
 const registerSchema = z.object({
