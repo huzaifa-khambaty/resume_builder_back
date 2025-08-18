@@ -1,5 +1,5 @@
 const { v4: uuidv4 } = require("uuid");
-const { Candidate } = require("../models");
+const { Candidate, Country, JobCategory } = require("../models");
 const PaginationService = require("./pagination.service");
 const bcrypt = require("bcryptjs");
 
@@ -55,7 +55,21 @@ async function createCandidateWithPassword(data) {
  * @returns {Promise<Candidate|null>}
  */
 async function findCandidateById(candidateId) {
-  return Candidate.findOne({ where: { candidate_id: candidateId } });
+  return Candidate.findOne({
+    where: { candidate_id: candidateId },
+    include: [
+      {
+        model: Country,
+        as: "country",
+        attributes: ["country_id", "country", "country_code"],
+      },
+      {
+        model: JobCategory,
+        as: "job_category",
+        attributes: ["job_category_id", "job_category"],
+      },
+    ],
+  });
 }
 
 /**
@@ -139,6 +153,18 @@ async function list(options = {}) {
         "image_url",
         "created_at",
         "updated_at",
+      ],
+      include: [
+        {
+          model: Country,
+          as: "country",
+          attributes: ["country_id", "country", "country_code"],
+        },
+        {
+          model: JobCategory,
+          as: "job_category",
+          attributes: ["job_category_id", "job_category"],
+        },
       ],
       searchableFields: ["full_name", "email"],
       allowedSortFields: ["full_name", "email", "created_at", "updated_at"],
