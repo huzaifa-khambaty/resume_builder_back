@@ -28,6 +28,10 @@ module.exports = (sequelize, DataTypes) => {
       country_id: {
         type: DataTypes.UUID,
         allowNull: true,
+        references: {
+          model: Country,
+          key: "country_id",
+        },
       },
       seniority_level: {
         type: DataTypes.STRING,
@@ -84,6 +88,10 @@ module.exports = (sequelize, DataTypes) => {
       job_category_id: {
         type: DataTypes.UUID,
         allowNull: true,
+        references: {
+          model: JobCategory,
+          key: "job_category_id",
+        },
       },
       created_by: {
         type: DataTypes.UUID,
@@ -113,15 +121,16 @@ module.exports = (sequelize, DataTypes) => {
     }
   );
 
-  Candidate.belongsTo(JobCategory, {
-    foreignKey: "job_category_id",
-    as: "job_category",
-  });
-
-  Candidate.belongsTo(Country, {
-    foreignKey: "country_id",
-    as: "country",
-  });
+  Candidate.associate = (models) => {
+    Candidate.belongsTo(models.JobCategory, {
+      foreignKey: "job_category_id",
+      as: "job_category",
+    });
+    Candidate.belongsTo(models.Country, {
+      foreignKey: "country_id",
+      as: "country",
+    });
+  };
 
   return Candidate;
 };
