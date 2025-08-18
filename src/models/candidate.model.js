@@ -1,3 +1,5 @@
+const { JobCategory, Country } = require("./index");
+
 module.exports = (sequelize, DataTypes) => {
   const Candidate = sequelize.define(
     "Candidate",
