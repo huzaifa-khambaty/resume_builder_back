@@ -1,4 +1,4 @@
-const { Country } = require("../models");
+const { Country, JobCategory } = require("../models");
 const PaginationService = require("./pagination.service");
 
 // Map supported lookup entities to their configs
@@ -16,6 +16,14 @@ const ENTITY_CONFIG = {
     allowedSortFields: ["country", "country_code", "created_at", "updated_at"],
     defaultSortBy: "country",
     path: "/api/lookup/countries",
+  },
+  "job-categories": {
+    model: JobCategory,
+    attributes: ["job_category_id", "job_category", "created_at", "updated_at"],
+    searchableFields: ["job_category"],
+    allowedSortFields: ["job_category", "created_at", "updated_at"],
+    defaultSortBy: "job_category",
+    path: "/api/lookup/job-categories",
   },
 };
 
