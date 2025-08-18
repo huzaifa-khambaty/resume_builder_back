@@ -207,7 +207,7 @@ async function verifyEmail(req, res) {
     await saveApiToken(candidate.candidate_id, finalToken);
 
     // Redirect to frontend with token
-    const redirectUrl = `${frontendUrl}/verified?token=${encodeURIComponent(
+    const redirectUrl = `${frontendUrl}/login-success?token=${encodeURIComponent(
       finalToken
     )}`;
     return res.redirect(302, redirectUrl);
