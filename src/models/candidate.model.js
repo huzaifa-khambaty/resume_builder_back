@@ -110,5 +110,16 @@ module.exports = (sequelize, DataTypes) => {
       underscored: true,
     }
   );
+
+  Candidate.belongsTo(JobCategory, {
+    foreignKey: "job_category_id",
+    as: "job_category",
+  });
+
+  Candidate.belongsTo(Country, {
+    foreignKey: "country_id",
+    as: "country",
+  });
+
   return Candidate;
 };
