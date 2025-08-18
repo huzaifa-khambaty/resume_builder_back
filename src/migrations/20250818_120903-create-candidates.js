@@ -1,114 +1,121 @@
 "use strict";
 
-const { DataTypes } = require("sequelize");
-
-/** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
     await queryInterface.createTable("candidates", {
       candidate_id: {
-        type: DataTypes.UUID,
+        type: Sequelize.UUID,
         primaryKey: true,
-        defaultValue: DataTypes.UUIDV4,
+        allowNull: false,
+        defaultValue: Sequelize.UUIDV4,
       },
       email: {
-        type: DataTypes.STRING,
+        type: Sequelize.STRING,
         allowNull: false,
         unique: true,
       },
       password: {
-        type: DataTypes.STRING,
+        type: Sequelize.STRING,
         allowNull: true,
       },
       full_name: {
-        type: DataTypes.STRING,
+        type: Sequelize.STRING,
         allowNull: false,
       },
       country_id: {
-        type: DataTypes.UUID,
+        type: Sequelize.UUID,
         allowNull: true,
+        references: { model: "countries", key: "country_id" },
+        onUpdate: "CASCADE",
+        onDelete: "SET NULL",
       },
       seniority_level: {
-        type: DataTypes.STRING,
+        type: Sequelize.STRING,
         allowNull: true,
       },
       is_active: {
-        type: DataTypes.BOOLEAN,
+        type: Sequelize.BOOLEAN,
+        allowNull: false,
         defaultValue: true,
       },
       api_token: {
-        type: DataTypes.STRING,
+        type: Sequelize.TEXT,
         allowNull: true,
       },
       expiry_date: {
-        type: DataTypes.DATE,
+        type: Sequelize.DATE,
         allowNull: true,
       },
       image_url: {
-        type: DataTypes.STRING,
+        type: Sequelize.TEXT,
         allowNull: true,
       },
       resume_url: {
-        type: DataTypes.STRING,
+        type: Sequelize.TEXT,
         allowNull: true,
       },
       skills: {
-        type: DataTypes.JSONB,
+        type: Sequelize.JSONB,
         allowNull: true,
-        defaultValue: [],
       },
       work_experience: {
-        type: DataTypes.JSONB,
+        type: Sequelize.JSONB,
         allowNull: true,
-        defaultValue: [],
       },
       education: {
-        type: DataTypes.JSONB,
+        type: Sequelize.JSONB,
         allowNull: true,
-        defaultValue: [],
       },
       payment_gateway: {
-        type: DataTypes.STRING,
+        type: Sequelize.STRING,
         allowNull: true,
       },
       subscription_id: {
-        type: DataTypes.STRING,
+        type: Sequelize.STRING,
         allowNull: true,
       },
       qty: {
-        type: DataTypes.INTEGER,
+        type: Sequelize.INTEGER,
         allowNull: true,
       },
       unit_price: {
-        type: DataTypes.DECIMAL(10, 2),
+        type: Sequelize.DECIMAL(10, 2),
         allowNull: true,
       },
       job_category_id: {
-        type: DataTypes.UUID,
+        type: Sequelize.UUID,
         allowNull: true,
+        references: { model: "job_categories", key: "job_category_id" },
+        onUpdate: "CASCADE",
+        onDelete: "SET NULL",
       },
       created_by: {
-        type: DataTypes.UUID,
+        type: Sequelize.UUID,
         allowNull: false,
       },
       updated_by: {
-        type: DataTypes.UUID,
+        type: Sequelize.UUID,
         allowNull: true,
       },
       created_at: {
-        type: DataTypes.DATE,
+        type: Sequelize.DATE,
         allowNull: false,
-        defaultValue: DataTypes.NOW,
+        defaultValue: Sequelize.fn("NOW"),
       },
       updated_at: {
-        type: DataTypes.DATE,
+        type: Sequelize.DATE,
         allowNull: false,
-        defaultValue: DataTypes.NOW,
+        defaultValue: Sequelize.fn("NOW"),
       },
+    });
+
+    await queryInterface.addIndex("candidates", ["email"], {
+      unique: true,
+      name: "idx_candidates_email_unique",
     });
   },
 
-  async down(queryInterface, Sequelize) {
+  async down(queryInterface) {
     await queryInterface.dropTable("candidates");
   },
 };

@@ -1,62 +1,58 @@
 "use strict";
 
-const { DataTypes } = require("sequelize");
-
-/** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
     await queryInterface.createTable("users", {
       user_id: {
-        type: DataTypes.UUID,
+        type: Sequelize.UUID,
         primaryKey: true,
-        defaultValue: DataTypes.UUIDV4,
+        allowNull: false,
+        defaultValue: Sequelize.UUIDV4,
       },
       email: {
-        type: DataTypes.STRING,
+        type: Sequelize.STRING,
         allowNull: false,
         unique: true,
-        validate: {
-          isEmail: true,
-        },
       },
       password: {
-        type: DataTypes.STRING,
-        allowNull: true,
+        type: Sequelize.STRING,
+        allowNull: false,
       },
       full_name: {
-        type: DataTypes.STRING,
+        type: Sequelize.STRING,
         allowNull: false,
       },
       is_active: {
-        type: DataTypes.BOOLEAN,
+        type: Sequelize.BOOLEAN,
+        allowNull: false,
         defaultValue: true,
       },
       api_token: {
-        type: DataTypes.STRING,
+        type: Sequelize.TEXT,
         allowNull: true,
       },
       created_by: {
-        type: DataTypes.UUID,
+        type: Sequelize.UUID,
         allowNull: false,
       },
       updated_by: {
-        type: DataTypes.UUID,
+        type: Sequelize.UUID,
         allowNull: true,
       },
       created_at: {
-        type: DataTypes.DATE,
+        type: Sequelize.DATE,
         allowNull: false,
-        defaultValue: DataTypes.NOW,
+        defaultValue: Sequelize.fn("NOW"),
       },
       updated_at: {
-        type: DataTypes.DATE,
+        type: Sequelize.DATE,
         allowNull: false,
-        defaultValue: DataTypes.NOW,
+        defaultValue: Sequelize.fn("NOW"),
       },
     });
   },
 
-  async down(queryInterface, Sequelize) {
+  async down(queryInterface) {
     await queryInterface.dropTable("users");
   },
 };
