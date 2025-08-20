@@ -9,29 +9,12 @@ You are a data curator. Return employers for the following positions in Pakistan
 [
  "Software Engineer",
 "DevOps Engineer",
-"Data Analyst",
-"Cybersecurity Analyst",
-"Product Manager",
-"QA Engineer",
-"Project Manager",
-"UX/UI Designer",
-"Digital Marketing Specialist",
-"Account Executive (Sales)",
-"Customer Support Specialist",
-"Accountant",
-"HR Generalist",
-"Supply Chain Analyst",
-"Business Analyst",
-"Civil Engineer",
-"Electrical Engineer",
-"Mechanical Engineer",
-"Registered Nurse",
-"Teacher / Instructor"
+"Data Analyst"
 ]
 
 ### Instructions
 - Return the response in **strict JSON format** as a JSON array, where each object corresponds to a single position.
-- Each position must include up to **25 plausible, mid-size or large employers** that commonly hire for the role in Pakistan.
+- Each position must include up to **5 plausible, mid-size or large employers** that commonly hire for the role in Pakistan.
 - Exclude staffing agencies, very small companies, or irrelevant employers.
 - Use official **English names** for employers.
 - Ensure the response is **neutral, unbiased, and country-appropriate**.
@@ -56,6 +39,7 @@ You are a data curator. Return employers for the following positions in Pakistan
           "required": ["name", "country_iso2", "confidence"],
           "properties": {
             "name": { "type": "string", "minLength": 2 },
+            "email": { "type": "string", "nullable": true },
             "website": { "type": "string", "nullable": true },
             "sector": { "type": "string", "nullable": true },
             "country_iso2": { "type": "string", "minLength": 2, "maxLength": 2 },
