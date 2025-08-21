@@ -1,4 +1,4 @@
-const { Country, JobCategory } = require("../models");
+const { Country, JobCategory, Employer } = require("../models");
 
 async function getCountryAndCategoryByIds(country_id, job_category_id) {
   const [country, jobCategory] = await Promise.all([
@@ -35,7 +35,7 @@ function buildEmployerPrompt({
 
 ### Instructions
 - Return the response in **strict JSON format** as a JSON array with a single object for the provided position.
-- Include up to **5 plausible, mid-size or large employers** that commonly hire for the role in ${country_name}.
+- Include up to **25 plausible, mid-size or large employers** that commonly hire for the role in ${country_name}.
 - Exclude staffing agencies, very small companies, or irrelevant employers.
 - Use official **English names** for employers.
 - Ensure the response is **neutral, unbiased, and country-appropriate**.
@@ -161,4 +161,52 @@ module.exports = {
   getCountryAndCategoryByIds,
   buildEmployerPrompt,
   callOpenAIForEmployers,
+  saveEmployers,
 };
+
+// Save employers parsed from OpenAI response
+// parsed: normalized array of items with employers[]
+// Uses (employer_name, country_id) to dedupe records
+async function saveEmployers(parsed, country_id, actorId) {
+  const created_by = actorId;
+  const updated_by = actorId;
+
+  let created = 0;
+  let updated = 0;
+
+  for (const item of parsed) {
+    const employers = Array.isArray(item.employers) ? item.employers : [];
+    for (const e of employers) {
+      const employer_name = (e.name || "").trim();
+      if (!employer_name) continue;
+
+      const existing = await Employer.findOne({
+        where: { employer_name, country_id },
+      });
+
+      const payload = {
+        employer_name,
+        email: e.email || null,
+        website: e.website || null,
+        sector: e.sector || null,
+        city: e.city || null,
+        notes: e.notes || null,
+        confidence:
+          typeof e.confidence === "number" && !isNaN(e.confidence)
+            ? e.confidence
+            : null,
+        country_id,
+      };
+
+      if (existing) {
+        await existing.update({ ...payload, updated_by });
+        updated += 1;
+      } else {
+        await Employer.create({ ...payload, created_by, updated_by });
+        created += 1;
+      }
+    }
+  }
+
+  return { created, updated };
+}

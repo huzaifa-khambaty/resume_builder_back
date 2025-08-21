@@ -6,6 +6,7 @@ const {
   getCountryAndCategoryByIds,
   buildEmployerPrompt,
   callOpenAIForEmployers,
+  saveEmployers,
 } = require("../services/employer.service");
 
 // POST /api/employer/scrap
@@ -30,13 +31,18 @@ async function scrapEmployers(req, res, next) {
     const info = await getCountryAndCategoryByIds(country_id, job_category_id);
     const prompt = buildEmployerPrompt(info);
 
-    const { parsed, raw } = await callOpenAIForEmployers(prompt);
+    const { parsed } = await callOpenAIForEmployers(prompt);
+
+    // Determine actorId for auditing
+    const actorId = req.admin?.user_id;
+
+    // Persist employers automatically
+    const saveResult = await saveEmployers(parsed, country_id, actorId);
 
     return res.status(200).json({
       success: true,
-      prompt,
-      response: parsed,
-      raw_response: raw,
+      message: "Employers scraped successfully",
+      data: saveResult,
     });
   } catch (error) {
     logger?.error?.("scrapEmployers error", { error });
