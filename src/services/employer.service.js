@@ -1,4 +1,5 @@
 const { Country, JobCategory, Employer } = require("../models");
+const PaginationService = require("./pagination.service");
 
 async function getCountryAndCategoryByIds(country_id, job_category_id) {
   const [country, jobCategory] = await Promise.all([
@@ -157,11 +158,65 @@ async function callOpenAIForEmployers(prompt) {
   return { parsed, raw: message };
 }
 
+// Paginated list of employers
+async function listEmployers(options = {}) {
+  const { page, limit, search, sortBy, sortOrder, country_id } = options;
+
+  const whereClause = {};
+  if (country_id) whereClause.country_id = country_id;
+
+  const include = [
+    {
+      model: Country,
+      as: "country",
+      attributes: ["country_id", "country", "country_code"],
+    },
+  ];
+
+  const allowedSortFields = [
+    "created_at",
+    "updated_at",
+    "employer_name",
+    "email",
+    "sector",
+    "city",
+    "confidence",
+  ];
+
+  const searchableFields = [
+    "employer_name",
+    "email",
+    "sector",
+    "city",
+    "website",
+  ];
+
+  const result = await PaginationService.paginate({
+    page,
+    limit,
+    search,
+    sortBy,
+    sortOrder,
+    whereClause,
+    attributes: { exclude: ["password"] },
+    include,
+    allowedSortFields,
+    searchableFields,
+    model: Employer,
+  });
+
+  // Normalize to data + meta keys for controllers
+  const { data: payload } = result;
+  const { data: rows, ...meta } = payload;
+  return { data: rows, meta };
+}
+
 module.exports = {
   getCountryAndCategoryByIds,
   buildEmployerPrompt,
   callOpenAIForEmployers,
   saveEmployers,
+  listEmployers,
 };
 
 // Save employers parsed from OpenAI response

@@ -7,6 +7,7 @@ const {
   buildEmployerPrompt,
   callOpenAIForEmployers,
   saveEmployers,
+  listEmployers: listEmployersService,
 } = require("../services/employer.service");
 
 // POST /api/employer/scrap
@@ -54,3 +55,36 @@ async function scrapEmployers(req, res, next) {
 }
 
 module.exports = { scrapEmployers };
+
+// GET /api/employer
+async function listEmployers(req, res) {
+  try {
+    const { page, limit, search, sortBy, sortOrder, country_id } = req.query;
+    const result = await listEmployersService({
+      page,
+      limit,
+      search,
+      sortBy,
+      sortOrder,
+      country_id,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Employers fetched successfully",
+      data: {
+        data: result.data,
+        ...result.meta,
+      },
+    });
+  } catch (error) {
+    logger?.error?.("listEmployers error", { error });
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch employers",
+      error: error.message,
+    });
+  }
+}
+
+module.exports = { scrapEmployers, listEmployers };
