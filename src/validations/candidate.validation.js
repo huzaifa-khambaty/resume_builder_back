@@ -45,7 +45,7 @@ const experienceItem = z.object({
   location: z.string().min(1),
   start_date: isoDate,
   end_date: z.string().nullable().optional(),
-  description: z.string().min(10),
+  description: z.string().min(1),
 });
 
 const educationItem = z.object({
@@ -54,7 +54,7 @@ const educationItem = z.object({
   location: z.string().min(1),
   start_date: isoDate,
   end_date: isoDate,
-  description: z.string().min(10),
+  description: z.string().min(1),
 });
 
 // Candidate resume generation payload schema
