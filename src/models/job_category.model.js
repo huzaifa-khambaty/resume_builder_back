@@ -31,5 +31,13 @@ module.exports = (sequelize, DataTypes) => {
     underscored: true,
   }
 );
+
+  JobCategory.associate = (models) => {
+    JobCategory.hasMany(models.Job, {
+      foreignKey: "job_category_id",
+      as: "jobs",
+    });
+  };
+
   return JobCategory;
 };

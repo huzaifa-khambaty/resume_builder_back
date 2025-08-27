@@ -38,7 +38,7 @@ async function scrapEmployers(req, res, next) {
     const actorId = req.admin?.user_id;
 
     // Persist employers automatically
-    const saveResult = await saveEmployers(parsed, country_id, actorId);
+    const saveResult = await saveEmployers(parsed, country_id, job_category_id, actorId);
 
     return res.status(200).json({
       success: true,

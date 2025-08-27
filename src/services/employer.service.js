@@ -1,4 +1,4 @@
-const { Country, JobCategory, Employer } = require("../models");
+const { Country, JobCategory, Employer, Job } = require("../models");
 const PaginationService = require("./pagination.service");
 
 async function getCountryAndCategoryByIds(country_id, job_category_id) {
@@ -171,6 +171,18 @@ async function listEmployers(options = {}) {
       as: "country",
       attributes: ["country_id", "country", "country_code"],
     },
+    {
+      model: Job,
+      as: "jobs",
+      attributes: ["job_id", "job_title", "job_description", "no_of_vacancies"],
+      include: [
+        {
+          model: JobCategory,
+          as: "jobCategory",
+          attributes: ["job_category_id", "job_category"],
+        },
+      ],
+    },
   ];
 
   const allowedSortFields = [
@@ -221,13 +233,16 @@ module.exports = {
 
 // Save employers parsed from OpenAI response
 // parsed: normalized array of items with employers[]
-// Uses (employer_name, country_id) to dedupe records
-async function saveEmployers(parsed, country_id, actorId) {
+// Uses (employer_name, country_id) to dedupe employer records
+// Creates job entries in bridge table for each job_category_id
+async function saveEmployers(parsed, country_id, job_category_id, actorId) {
   const created_by = actorId;
   const updated_by = actorId;
 
-  let created = 0;
-  let updated = 0;
+  let employersCreated = 0;
+  let employersUpdated = 0;
+  let jobsCreated = 0;
+  let jobsUpdated = 0;
 
   for (const item of parsed) {
     const employers = Array.isArray(item.employers) ? item.employers : [];
@@ -235,11 +250,12 @@ async function saveEmployers(parsed, country_id, actorId) {
       const employer_name = (e.name || "").trim();
       if (!employer_name) continue;
 
-      const existing = await Employer.findOne({
+      // Check if employer exists
+      let employer = await Employer.findOne({
         where: { employer_name, country_id },
       });
 
-      const payload = {
+      const employerPayload = {
         employer_name,
         email: e.email || null,
         website: e.website || null,
@@ -253,15 +269,47 @@ async function saveEmployers(parsed, country_id, actorId) {
         country_id,
       };
 
-      if (existing) {
-        await existing.update({ ...payload, updated_by });
-        updated += 1;
+      if (employer) {
+        await employer.update({ ...employerPayload, updated_by });
+        employersUpdated += 1;
       } else {
-        await Employer.create({ ...payload, created_by, updated_by });
-        created += 1;
+        employer = await Employer.create({ ...employerPayload, created_by, updated_by });
+        employersCreated += 1;
+      }
+
+      // Check if job already exists for this employer and job_category
+      const existingJob = await Job.findOne({
+        where: { 
+          employer_id: employer.employer_id, 
+          job_category_id 
+        },
+      });
+
+      // Create default job title from job category if not provided
+      const job_title = item.position || `${employer_name} Position`;
+
+      const jobPayload = {
+        employer_id: employer.employer_id,
+        job_category_id,
+        job_title,
+        job_description: null, // Can be enhanced later
+        no_of_vacancies: 1, // Default value
+        created_by,
+        updated_by,
+      };
+
+      if (existingJob) {
+        await existingJob.update({ ...jobPayload, updated_by });
+        jobsUpdated += 1;
+      } else {
+        await Job.create(jobPayload);
+        jobsCreated += 1;
       }
     }
   }
 
-  return { created, updated };
+  return { 
+    employers: { created: employersCreated, updated: employersUpdated },
+    jobs: { created: jobsCreated, updated: jobsUpdated }
+  };
 }
