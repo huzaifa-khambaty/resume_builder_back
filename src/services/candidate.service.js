@@ -84,7 +84,7 @@ async function updateCandidateById(candidateId, data) {
     country_id: data.country_id,
     seniority_level: data.seniority_level,
     image_url: data.image_url,
-    resume_url: data.resume_url,
+    resume_key: data.resume_key,
     job_category_id: data.job_category_id,
     skills: data.skills,
     work_experience: data.work_experience,

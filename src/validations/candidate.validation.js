@@ -82,7 +82,27 @@ function validateGenerateResumePayload(body) {
   return { valid: true, cleaned: result.data };
 }
 
+// Resume upload validation schema
+const resumeUploadSchema = z
+  .object({
+    skills: z.array(z.string().min(1)).optional().default([]),
+    work_experience: z.array(experienceItem).optional().default([]),
+  })
+  .strict();
+
+function validateResumeUpload(body) {
+  const result = resumeUploadSchema.safeParse(body || {});
+  if (!result.success) {
+    return {
+      valid: false,
+      errors: result.error.flatten(),
+    };
+  }
+  return { valid: true, cleaned: result.data };
+}
+
 module.exports = {
   validateCandidateProfileUpdate,
   validateGenerateResumePayload,
+  validateResumeUpload,
 };

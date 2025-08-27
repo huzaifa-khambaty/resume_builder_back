@@ -53,7 +53,7 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.TEXT,
         allowNull: true,
       },
-      resume_url: {
+      resume_key: {
         type: DataTypes.TEXT,
         allowNull: true,
       },
