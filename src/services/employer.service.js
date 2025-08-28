@@ -160,10 +160,57 @@ async function callOpenAIForEmployers(prompt) {
 
 // Paginated list of employers
 async function listEmployers(options = {}) {
-  const { page, limit, search, sortBy, sortOrder, country_id } = options;
+  const {
+    page,
+    limit,
+    search,
+    sortBy,
+    sortOrder,
+    country_id,
+    sector,
+    city,
+    confidence,
+    website,
+    name,
+  } = options;
 
   const whereClause = {};
+
+  // Country filter
   if (country_id) whereClause.country_id = country_id;
+
+  // Sector filter
+  if (sector) {
+    whereClause.sector = {
+      [require("sequelize").Op.iLike]: `%${sector}%`,
+    };
+  }
+
+  // City filter
+  if (city) {
+    whereClause.city = {
+      [require("sequelize").Op.iLike]: `%${city}%`,
+    };
+  }
+
+  // Exact confidence filter
+  if (confidence !== undefined) {
+    whereClause.confidence = parseFloat(confidence);
+  }
+
+  // Website filter
+  if (website) {
+    whereClause.website = {
+      [require("sequelize").Op.iLike]: `%${website}%`,
+    };
+  }
+
+  // Name filter
+  if (name) {
+    whereClause.employer_name = {
+      [require("sequelize").Op.iLike]: `%${name}%`,
+    };
+  }
 
   const include = [
     {
@@ -273,15 +320,19 @@ async function saveEmployers(parsed, country_id, job_category_id, actorId) {
         await employer.update({ ...employerPayload, updated_by });
         employersUpdated += 1;
       } else {
-        employer = await Employer.create({ ...employerPayload, created_by, updated_by });
+        employer = await Employer.create({
+          ...employerPayload,
+          created_by,
+          updated_by,
+        });
         employersCreated += 1;
       }
 
       // Check if job already exists for this employer and job_category
       const existingJob = await Job.findOne({
-        where: { 
-          employer_id: employer.employer_id, 
-          job_category_id 
+        where: {
+          employer_id: employer.employer_id,
+          job_category_id,
         },
       });
 
@@ -308,8 +359,8 @@ async function saveEmployers(parsed, country_id, job_category_id, actorId) {
     }
   }
 
-  return { 
+  return {
     employers: { created: employersCreated, updated: employersUpdated },
-    jobs: { created: jobsCreated, updated: jobsUpdated }
+    jobs: { created: jobsCreated, updated: jobsUpdated },
   };
 }

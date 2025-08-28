@@ -1,6 +1,7 @@
 const logger = require("../config/logger");
 const {
   validateEmployerScrapInput,
+  validateEmployerListQuery,
 } = require("../validations/employer.validation");
 const {
   getCountryAndCategoryByIds,
@@ -38,7 +39,12 @@ async function scrapEmployers(req, res, next) {
     const actorId = req.admin?.user_id;
 
     // Persist employers automatically
-    const saveResult = await saveEmployers(parsed, country_id, job_category_id, actorId);
+    const saveResult = await saveEmployers(
+      parsed,
+      country_id,
+      job_category_id,
+      actorId
+    );
 
     return res.status(200).json({
       success: true,
@@ -54,12 +60,23 @@ async function scrapEmployers(req, res, next) {
   }
 }
 
-module.exports = { scrapEmployers };
-
 // GET /api/employer
 async function listEmployers(req, res) {
   try {
-    const { page, limit, search, sortBy, sortOrder, country_id } = req.query;
+    const {
+      page,
+      limit,
+      search,
+      sortBy,
+      sortOrder,
+      country_id,
+      sector,
+      city,
+      confidence,
+      website,
+      name,
+    } = req.query;
+
     const result = await listEmployersService({
       page,
       limit,
@@ -67,6 +84,11 @@ async function listEmployers(req, res) {
       sortBy,
       sortOrder,
       country_id,
+      sector,
+      city,
+      confidence,
+      website,
+      name,
     });
 
     return res.status(200).json({
