@@ -1,4 +1,5 @@
 const logger = require("../config/logger");
+const { getValidationErrorMessage } = require("../utils/errorHelper");
 const {
   validateEmployerScrapInput,
   validateEmployerListQuery,
@@ -25,7 +26,7 @@ async function scrapEmployers(req, res, next) {
     if (!valid) {
       return res
         .status(400)
-        .json({ success: false, message: "Invalid payload", errors });
+        .json({ success: false, message: getValidationErrorMessage(errors) });
     }
 
     const { country_id, job_category_id } = cleaned;

@@ -11,6 +11,7 @@ const {
   deleteCountryById,
 } = require("../services/country.service");
 const logger = require("../config/logger");
+const { getValidationErrorMessage } = require("../utils/errorHelper");
 
 /**
  * GET /api/countries
@@ -22,7 +23,7 @@ async function getCountries(req, res) {
     if (!valid) {
       return res
         .status(400)
-        .json({ success: false, message: "Invalid query parameters", errors });
+        .json({ success: false, message: getValidationErrorMessage(errors) });
     }
 
     const result = await list(cleaned);
@@ -94,7 +95,7 @@ async function createNewCountry(req, res) {
     if (!valid) {
       return res
         .status(400)
-        .json({ success: false, message: "Invalid payload", errors });
+        .json({ success: false, message: getValidationErrorMessage(errors) });
     }
 
     const createdBy = req.admin?.user_id || null;
@@ -146,7 +147,7 @@ async function updateCountry(req, res) {
     if (!valid) {
       return res
         .status(400)
-        .json({ success: false, message: "Invalid payload", errors });
+        .json({ success: false, message: getValidationErrorMessage(errors) });
     }
 
     const updatedBy = req.admin?.user_id || null;

@@ -75,22 +75,35 @@ async function findCandidateById(candidateId) {
 /**
  * Update candidate by id with allowed fields only
  * @param {string} candidateId
- * @param {Object} data
+ * @param {Object} updateData
  * @returns {Promise<Candidate>}
  */
-async function updateCandidateById(candidateId, data) {
-  const allowed = {
-    full_name: data.full_name,
-    country_id: data.country_id,
-    seniority_level: data.seniority_level,
-    image_url: data.image_url,
-    resume_key: data.resume_key,
-    job_category_id: data.job_category_id,
-    skills: data.skills,
-    work_experience: data.work_experience,
-    education: data.education,
-    updated_by: data.updated_by,
-  };
+async function updateCandidateById(candidateId, updateData) {
+  const allowedFields = [
+    "full_name",
+    "email",
+    "phone",
+    "location",
+    "bio",
+    "skills",
+    "work_experience",
+    "education",
+    "summary",
+    "resume_key",
+    "seniority_level",
+    "job_category_id",
+    "country_id",
+    "updated_by",
+  ];
+
+  // Filter updateData to only include allowed fields
+  const allowed = {};
+  allowedFields.forEach(field => {
+    if (updateData.hasOwnProperty(field)) {
+      allowed[field] = updateData[field];
+    }
+  });
+
   // Remove undefined keys
   Object.keys(allowed).forEach((k) =>
     allowed[k] === undefined ? delete allowed[k] : null

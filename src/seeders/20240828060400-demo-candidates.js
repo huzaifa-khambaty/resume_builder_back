@@ -73,6 +73,7 @@ module.exports = {
               description: "Focused on software engineering and databases. GPA: 3.8/4.0"
             }
           ]),
+          summary: "Experienced Senior Software Developer with 5+ years of expertise in full-stack development. Proven track record of leading development teams and delivering scalable web applications using modern technologies like Node.js, React, and AWS. Strong background in system architecture and database design with a passion for mentoring junior developers.",
           payment_gateway: "stripe",
           subscription_id: "sub_1234567890",
           qty: 1,
@@ -118,6 +119,7 @@ module.exports = {
               description: "Specialized in distributed systems and backend architectures."
             }
           ]),
+          summary: "Mid-level Backend Engineer with 4+ years of experience in Python and Django development. Specialized in building high-performance APIs and optimizing database queries. Strong expertise in distributed systems and microservices architecture with a focus on scalability and performance optimization.",
           payment_gateway: "paypal",
           subscription_id: "I-ABCDEFGHIJKL",
           qty: 1,
@@ -163,6 +165,7 @@ module.exports = {
               description: "Comprehensive web development program covering frontend and backend technologies."
             }
           ]),
+          summary: "Junior Frontend Developer with 1+ year of experience in modern web development. Proficient in Vue.js, JavaScript, and responsive design principles. Eager to learn and grow in a collaborative team environment while contributing to innovative web applications and user experiences.",
           payment_gateway: null,
           subscription_id: null,
           qty: 1,

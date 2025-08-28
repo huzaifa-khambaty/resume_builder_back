@@ -12,6 +12,7 @@ const candidateProfileSchema = z
     skills: z.any().optional().nullable(),
     work_experience: z.any().optional().nullable(),
     education: z.any().optional().nullable(),
+    summary: z.string().max(2000).optional().nullable(),
     // explicitly disallow password updates here
     password: z.never().optional(),
     email: z.never().optional(),
@@ -68,6 +69,7 @@ const candidateResumeSchema = z
     work_experience: z.array(experienceItem).default([]),
     skills: z.array(z.string().min(1)).default([]),
     education: z.array(educationItem).default([]),
+    summary: z.string().max(2000).optional().nullable(),
   })
   .strict();
 
@@ -85,8 +87,14 @@ function validateGenerateResumePayload(body) {
 // Resume upload validation schema
 const resumeUploadSchema = z
   .object({
+    full_name: z.string().min(1).max(255),
+    seniority_level: z.string().min(1).max(255).optional().nullable(),
+    job_category_id: z.string().uuid({ message: "job_category_id must be a valid UUID" }),
+    country_id: z.string().uuid({ message: "country_id must be a valid UUID" }),
+    education: z.array(educationItem).optional().default([]),
     skills: z.array(z.string().min(1)).optional().default([]),
     work_experience: z.array(experienceItem).optional().default([]),
+    summary: z.string().max(2000).optional().nullable(),
   })
   .strict();
 
@@ -101,8 +109,56 @@ function validateResumeUpload(body) {
   return { valid: true, cleaned: result.data };
 }
 
+// Resume edit validation schema (same as upload but all fields optional)
+const resumeEditSchema = z
+  .object({
+    full_name: z.string().min(1).max(255).optional(),
+    seniority_level: z.string().min(1).max(255).optional().nullable(),
+    job_category_id: z.string().uuid({ message: "job_category_id must be a valid UUID" }).optional(),
+    country_id: z.string().uuid({ message: "country_id must be a valid UUID" }).optional(),
+    education: z.array(educationItem).optional().default([]),
+    skills: z.array(z.string().min(1)).optional().default([]),
+    work_experience: z.array(experienceItem).optional().default([]),
+    summary: z.string().max(2000).optional().nullable(),
+  })
+  .strict();
+
+function validateResumeEdit(body) {
+  const result = resumeEditSchema.safeParse(body || {});
+  if (!result.success) {
+    return {
+      valid: false,
+      errors: result.error.flatten(),
+    };
+  }
+  return { valid: true, cleaned: result.data };
+}
+
+// Resume download validation schema
+const resumeDownloadSchema = z
+  .object({
+    key: z.string().min(1, "Resume key is required").regex(
+      /^resumes\/[a-f0-9-]{36}\/[^\/]+$/,
+      "Invalid resume key format. Expected: resumes/{uuid}/{filename}"
+    ),
+  })
+  .strict();
+
+function validateResumeDownload(params) {
+  const result = resumeDownloadSchema.safeParse(params || {});
+  if (!result.success) {
+    return {
+      valid: false,
+      errors: result.error.flatten(),
+    };
+  }
+  return { valid: true, cleaned: result.data };
+}
+
 module.exports = {
   validateCandidateProfileUpdate,
   validateGenerateResumePayload,
   validateResumeUpload,
+  validateResumeEdit,
+  validateResumeDownload,
 };

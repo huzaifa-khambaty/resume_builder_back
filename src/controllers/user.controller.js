@@ -2,6 +2,7 @@ const {
   validateAdminProfileUpdate,
 } = require("../validations/user.validation");
 const { updateUserById } = require("../services/user.service");
+const { getValidationErrorMessage } = require("../utils/errorHelper");
 
 async function updateAdminProfile(req, res) {
   try {
@@ -11,7 +12,7 @@ async function updateAdminProfile(req, res) {
     if (!valid) {
       return res
         .status(400)
-        .json({ success: false, message: "Invalid payload", errors });
+        .json({ success: false, message: getValidationErrorMessage(errors) });
     }
 
     const userId = req.admin.user_id;

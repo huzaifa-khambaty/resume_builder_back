@@ -71,6 +71,10 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.JSONB,
         allowNull: true,
       },
+      summary: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
       payment_gateway: {
         type: DataTypes.STRING,
         allowNull: true,
