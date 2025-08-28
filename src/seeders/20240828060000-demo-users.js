@@ -7,7 +7,7 @@ const bcrypt = require("bcryptjs");
 module.exports = {
   async up(queryInterface, Sequelize) {
     const adminUserId = uuidv4();
-    const saltRounds = +process.env.BCRYPT_SALT_ROUNDS;
+    const saltRounds = +process.env.BCRYPT_SALT_ROUNDS || 10;
 
     await queryInterface.bulkInsert(
       "users",
@@ -15,11 +15,23 @@ module.exports = {
         {
           user_id: adminUserId,
           email: "admin@gmail.com",
-          password: bcrypt.hashSync("12345678", saltRounds), // Should be pre-hashed
+          password: bcrypt.hashSync("12345678", saltRounds),
           full_name: "Admin User",
           is_active: true,
           api_token: null,
           created_by: adminUserId, // Self-created
+          updated_by: null,
+          created_at: new Date(),
+          updated_at: new Date(),
+        },
+        {
+          user_id: uuidv4(),
+          email: "manager@gmail.com",
+          password: bcrypt.hashSync("12345678", saltRounds),
+          full_name: "Manager User",
+          is_active: true,
+          api_token: null,
+          created_by: adminUserId,
           updated_by: null,
           created_at: new Date(),
           updated_at: new Date(),

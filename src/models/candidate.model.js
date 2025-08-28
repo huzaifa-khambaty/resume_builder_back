@@ -32,6 +32,8 @@ module.exports = (sequelize, DataTypes) => {
           model: Country,
           key: "country_id",
         },
+        onDelete: "RESTRICT",
+        onUpdate: "CASCADE",
       },
       seniority_level: {
         type: DataTypes.STRING,

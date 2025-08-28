@@ -1,18 +1,22 @@
-"use strict";
+'use strict';
 
+/** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.createTable("employers", {
+    await queryInterface.createTable('employers', {
       employer_id: {
         type: Sequelize.UUID,
         primaryKey: true,
-        allowNull: false,
         defaultValue: Sequelize.UUIDV4,
+        allowNull: false,
       },
       email: {
         type: Sequelize.STRING,
-        allowNull: false,
+        allowNull: true,
         unique: true,
+        validate: {
+          isEmail: true,
+        },
       },
       password: {
         type: Sequelize.STRING,
@@ -25,9 +29,12 @@ module.exports = {
       country_id: {
         type: Sequelize.UUID,
         allowNull: true,
-        references: { model: "countries", key: "country_id" },
-        onUpdate: "CASCADE",
-        onDelete: "SET NULL",
+        references: {
+          model: 'countries',
+          key: 'country_id',
+        },
+        onDelete: 'RESTRICT',
+        onUpdate: 'CASCADE',
       },
       website: {
         type: Sequelize.STRING,
@@ -60,22 +67,36 @@ module.exports = {
       created_at: {
         type: Sequelize.DATE,
         allowNull: false,
-        defaultValue: Sequelize.fn("NOW"),
+        defaultValue: Sequelize.NOW,
       },
       updated_at: {
         type: Sequelize.DATE,
         allowNull: false,
-        defaultValue: Sequelize.fn("NOW"),
+        defaultValue: Sequelize.NOW,
       },
     });
 
-    await queryInterface.addIndex("employers", ["email"], {
+    // Add indexes
+    await queryInterface.addIndex('employers', ['email'], {
       unique: true,
-      name: "idx_employers_email_unique",
+      name: 'employers_email_unique',
+      where: {
+        email: {
+          [Sequelize.Op.ne]: null
+        }
+      }
+    });
+    
+    await queryInterface.addIndex('employers', ['country_id'], {
+      name: 'employers_country_id_idx',
+    });
+    
+    await queryInterface.addIndex('employers', ['employer_name'], {
+      name: 'employers_employer_name_idx',
     });
   },
 
-  async down(queryInterface) {
-    await queryInterface.dropTable("employers");
-  },
+  async down(queryInterface, Sequelize) {
+    await queryInterface.dropTable('employers');
+  }
 };

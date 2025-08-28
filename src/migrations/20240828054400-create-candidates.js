@@ -1,18 +1,22 @@
-"use strict";
+'use strict';
 
+/** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.createTable("candidates", {
+    await queryInterface.createTable('candidates', {
       candidate_id: {
         type: Sequelize.UUID,
         primaryKey: true,
-        allowNull: false,
         defaultValue: Sequelize.UUIDV4,
+        allowNull: false,
       },
       email: {
         type: Sequelize.STRING,
         allowNull: false,
         unique: true,
+        validate: {
+          isEmail: true,
+        },
       },
       password: {
         type: Sequelize.STRING,
@@ -25,9 +29,12 @@ module.exports = {
       country_id: {
         type: Sequelize.UUID,
         allowNull: true,
-        references: { model: "countries", key: "country_id" },
-        onUpdate: "CASCADE",
-        onDelete: "SET NULL",
+        references: {
+          model: 'countries',
+          key: 'country_id',
+        },
+        onDelete: 'RESTRICT',
+        onUpdate: 'CASCADE',
       },
       seniority_level: {
         type: Sequelize.STRING,
@@ -35,8 +42,8 @@ module.exports = {
       },
       is_active: {
         type: Sequelize.BOOLEAN,
-        allowNull: false,
         defaultValue: true,
+        allowNull: false,
       },
       api_token: {
         type: Sequelize.TEXT,
@@ -50,7 +57,7 @@ module.exports = {
         type: Sequelize.TEXT,
         allowNull: true,
       },
-      resume_url: {
+      resume_key: {
         type: Sequelize.TEXT,
         allowNull: true,
       },
@@ -85,9 +92,12 @@ module.exports = {
       job_category_id: {
         type: Sequelize.UUID,
         allowNull: true,
-        references: { model: "job_categories", key: "job_category_id" },
-        onUpdate: "CASCADE",
-        onDelete: "SET NULL",
+        references: {
+          model: 'job_categories',
+          key: 'job_category_id',
+        },
+        onDelete: 'RESTRICT',
+        onUpdate: 'CASCADE',
       },
       created_by: {
         type: Sequelize.UUID,
@@ -100,22 +110,39 @@ module.exports = {
       created_at: {
         type: Sequelize.DATE,
         allowNull: false,
-        defaultValue: Sequelize.fn("NOW"),
+        defaultValue: Sequelize.NOW,
       },
       updated_at: {
         type: Sequelize.DATE,
         allowNull: false,
-        defaultValue: Sequelize.fn("NOW"),
+        defaultValue: Sequelize.NOW,
       },
     });
 
-    await queryInterface.addIndex("candidates", ["email"], {
+    // Add indexes
+    await queryInterface.addIndex('candidates', ['email'], {
       unique: true,
-      name: "idx_candidates_email_unique",
+      name: 'candidates_email_unique',
+    });
+    
+    await queryInterface.addIndex('candidates', ['country_id'], {
+      name: 'candidates_country_id_idx',
+    });
+    
+    await queryInterface.addIndex('candidates', ['job_category_id'], {
+      name: 'candidates_job_category_id_idx',
+    });
+    
+    await queryInterface.addIndex('candidates', ['is_active'], {
+      name: 'candidates_is_active_idx',
+    });
+    
+    await queryInterface.addIndex('candidates', ['expiry_date'], {
+      name: 'candidates_expiry_date_idx',
     });
   },
 
-  async down(queryInterface) {
-    await queryInterface.dropTable("candidates");
-  },
+  async down(queryInterface, Sequelize) {
+    await queryInterface.dropTable('candidates');
+  }
 };

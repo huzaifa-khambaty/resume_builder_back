@@ -30,6 +30,8 @@ module.exports = (sequelize, DataTypes) => {
           model: Country,
           key: "country_id",
         },
+        onDelete: "RESTRICT",
+        onUpdate: "CASCADE",
       },
       website: {
         type: DataTypes.STRING,
