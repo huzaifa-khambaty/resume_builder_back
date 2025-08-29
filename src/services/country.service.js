@@ -1,4 +1,5 @@
 const { v4: uuidv4 } = require("uuid");
+const { Op } = require("sequelize");
 const { Country, Candidate, Employer } = require("../models");
 const PaginationService = require("./pagination.service");
 
@@ -29,7 +30,12 @@ async function list(options = {}) {
         "updated_at",
       ],
       searchableFields: ["country", "country_code"],
-      allowedSortFields: ["country", "country_code", "created_at", "updated_at"],
+      allowedSortFields: [
+        "country",
+        "country_code",
+        "created_at",
+        "updated_at",
+      ],
       path: "/api/countries",
     });
 
@@ -125,7 +131,7 @@ async function updateCountryById(countryId, data, updatedBy = null) {
     country_code: data.country_code,
     updated_by: updatedBy,
   };
-  
+
   // Remove undefined keys
   Object.keys(allowed).forEach((k) =>
     allowed[k] === undefined ? delete allowed[k] : null
@@ -149,8 +155,10 @@ async function deleteCountryById(countryId) {
     return deleted > 0;
   } catch (error) {
     // Handle foreign key constraint violations
-    if (error.name === 'SequelizeForeignKeyConstraintError') {
-      throw new Error('Cannot delete country. It is currently being used by candidates or employers.');
+    if (error.name === "SequelizeForeignKeyConstraintError") {
+      throw new Error(
+        "Cannot delete country. It is currently being used by candidates or employers."
+      );
     }
     throw error;
   }
@@ -165,9 +173,9 @@ async function deleteCountryById(countryId) {
 async function countryExistsByName(country, excludeId = null) {
   const where = { country };
   if (excludeId) {
-    where.country_id = { [require("sequelize").Op.ne]: excludeId };
+    where.country_id = { [Op.ne]: excludeId };
   }
-  
+
   const existing = await Country.findOne({ where });
   return !!existing;
 }
@@ -181,9 +189,9 @@ async function countryExistsByName(country, excludeId = null) {
 async function countryExistsByCode(countryCode, excludeId = null) {
   const where = { country_code: countryCode };
   if (excludeId) {
-    where.country_id = { [require("sequelize").Op.ne]: excludeId };
+    where.country_id = { [Op.ne]: excludeId };
   }
-  
+
   const existing = await Country.findOne({ where });
   return !!existing;
 }
