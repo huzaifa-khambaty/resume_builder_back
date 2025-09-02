@@ -24,20 +24,10 @@ jobs:
             set -e
             echo "===== Deploy start: $(date) ====="
 
-            # Remove old folder and clone fresh
-            if [ -d "/home/ubuntu/resume_builder_back" ]; then
-              rm -rf /home/ubuntu/resume_builder_back
-            fi
-            git clone git@github.com:huzaifa-khambaty/resume_builder_back.git /home/ubuntu/resume_builder_back
-
             cd /home/ubuntu/resume_builder_back
 
             # Install dependencies
-            if [ -f package-lock.json ]; then
-              npm ci
-            else
-              npm install
-            fi
+            npm install
 
             # No build step required
             echo "Skipping build step (no build script in package.json)"
