@@ -1,0 +1,4 @@
+Host: email-smtp.eu-north-1.amazonaws.com
+User: AKIARSUGAP3SEMXVWMET
+Password: BGqdTfhs9Wb9tAfIaC71ilGUPlN/hD9arjvsfSel8icV
+Port: 25, 587 or 2587 (TLS), 465, 2465

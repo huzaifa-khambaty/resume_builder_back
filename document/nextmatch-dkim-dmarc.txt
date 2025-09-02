@@ -1,0 +1,9 @@
+DKIM Records
+Type	Name								Value
+CNAME	kqxr66hneds2r3hhc4bdazumams7faqz._domainkey.nextmatch.ai	kqxr66hneds2r3hhc4bdazumams7faqz.dkim.amazonses.com
+CNAME	hdq5ix7rgqxlrvxqnzwpj6bwafi66zyk._domainkey.nextmatch.ai	hdq5ix7rgqxlrvxqnzwpj6bwafi66zyk.dkim.amazonses.com
+CNAME	rrwp6fqisibhxiugpqpjbnmyapfb4rkl._domainkey.nextmatch.ai	rrwp6fqisibhxiugpqpjbnmyapfb4rkl.dkim.amazonses.com
+
+
+DMARC records
+TXT	_dmarc.nextmatch.ai	"v=DMARC1; p=none;"
