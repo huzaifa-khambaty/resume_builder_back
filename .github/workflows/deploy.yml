@@ -1,0 +1,65 @@
+name: Deploy Node.js App to EC2
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    env:
+      HOST: ${{ secrets.EC2_HOST }}
+      USER: ${{ secrets.EC2_USER }}
+      APP_DIR: ${{ secrets.EC2_APP_DIR }}
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies (for build step if needed)
+        run: npm ci
+
+      - name: Build project
+        run: npm run build || echo "No build step"
+
+      - name: Archive project
+        run: tar --exclude='.git' --exclude='node_modules' -czf app.tgz .
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/resume_builder
+          chmod 600 ~/.ssh/resume_builder
+          ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts
+
+      - name: Upload to EC2
+        run: scp -i ~/.ssh/resume_builder app.tgz $USER@$HOST:/tmp/app.tgz
+
+      - name: Deploy on EC2
+        run: |
+          ssh -i ~/.ssh/resume_builder $USER@$HOST << 'EOF'
+          set -e
+          mkdir -p $APP_DIR
+          tar -xzf /tmp/app.tgz -C $APP_DIR
+          rm /tmp/app.tgz
+          cd $APP_DIR
+
+          # install dependencies on server
+          npm ci --omit=dev
+
+          # start or reload with PM2
+          if pm2 describe resume_builder_back > /dev/null; then
+            pm2 reload resume_builder_back
+          else
+            pm2 start npm --name resume_builder_back -- start
+          fi
+
+          pm2 save
+          EOF
