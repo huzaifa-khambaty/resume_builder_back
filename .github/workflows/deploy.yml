@@ -1,4 +1,4 @@
-name: Deploy Node.js App to EC2
+name: Deploy to EC2 (main)
 
 on:
   push:
@@ -7,59 +7,49 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     env:
-      HOST: ${{ secrets.EC2_HOST }}
-      USER: ${{ secrets.EC2_USER }}
-      APP_DIR: ${{ secrets.EC2_APP_DIR }}
-
+      SSH_PORT: ${{ secrets.EC2_SSH_PORT || '22' }}
     steps:
-      - name: Checkout source
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - name: Deploy via SSH to EC2
+        uses: appleboy/ssh-action@v0.1.7
         with:
-          node-version: '20'
-          cache: 'npm'
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: ${{ secrets.EC2_SSH_PORT }}
+          script: |
+            set -e
+            echo "===== Deploy start: $(date) ====="
+            cd /home/ubuntu/resume_builder_back
 
-      - name: Install dependencies (for build step if needed)
-        run: npm ci
+            # Make sure repository is available
+            git fetch --all --prune
+            git reset --hard origin/main
 
-      - name: Build project
-        run: npm run build || echo "No build step"
+            # If you use nvm on server, load it (optional)
+            if [ -s "$HOME/.nvm/nvm.sh" ]; then
+              export NVM_DIR="$HOME/.nvm"
+              . "$NVM_DIR/nvm.sh"
+              nvm use || true
+            fi
 
-      - name: Archive project
-        run: tar --exclude='.git' --exclude='node_modules' -czf app.tgz .
+            # Install dependencies (use npm ci if package-lock.json is present)
+            if [ -f package-lock.json ]; then
+              npm ci
+            else
+              npm install
+            fi
 
-      - name: Setup SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/resume_builder
-          chmod 600 ~/.ssh/resume_builder
-          ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts
+            # Build
+            NODE_ENV=production npm run build
 
-      - name: Upload to EC2
-        run: scp -i ~/.ssh/resume_builder app.tgz $USER@$HOST:/tmp/app.tgz
+            # Restart with pm2. Replace "resume_builder_back" with your pm2 process name if different.
+            pm2 restart resume_builder_back || pm2 start npm --name "resume_builder_back" -- start
 
-      - name: Deploy on EC2
-        run: |
-          ssh -i ~/.ssh/resume_builder $USER@$HOST << 'EOF'
-          set -e
-          mkdir -p $APP_DIR
-          tar -xzf /tmp/app.tgz -C $APP_DIR
-          rm /tmp/app.tgz
-          cd $APP_DIR
+            # Persist process list so it restarts on reboot (pm2 must be installed globally)
+            pm2 save
 
-          # install dependencies on server
-          npm ci --omit=dev
-
-          # start or reload with PM2
-          if pm2 describe resume_builder_back > /dev/null; then
-            pm2 reload resume_builder_back
-          else
-            pm2 start npm --name resume_builder_back -- start
-          fi
-
-          pm2 save
-          EOF
+            echo "===== Deploy finished: $(date) ====="
