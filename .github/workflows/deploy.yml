@@ -23,33 +23,27 @@ jobs:
           script: |
             set -e
             echo "===== Deploy start: $(date) ====="
+
+            # Remove old folder and clone fresh
+            if [ -d "/home/ubuntu/resume_builder_back" ]; then
+              rm -rf /home/ubuntu/resume_builder_back
+            fi
+            git clone git@github.com:huzaifa-khambaty/resume_builder_back.git /home/ubuntu/resume_builder_back
+
             cd /home/ubuntu/resume_builder_back
 
-            # Make sure repository is available
-            git fetch --all --prune
-            git reset --hard origin/main
-
-            # If you use nvm on server, load it (optional)
-            if [ -s "$HOME/.nvm/nvm.sh" ]; then
-              export NVM_DIR="$HOME/.nvm"
-              . "$NVM_DIR/nvm.sh"
-              nvm use || true
-            fi
-
-            # Install dependencies (use npm ci if package-lock.json is present)
+            # Install dependencies
             if [ -f package-lock.json ]; then
               npm ci
             else
               npm install
             fi
 
-            # Build
-            NODE_ENV=production npm run build
+            # No build step required
+            echo "Skipping build step (no build script in package.json)"
 
-            # Restart with pm2. Replace "resume_builder_back" with your pm2 process name if different.
+            # Start / restart with pm2
             pm2 restart resume_builder_back || pm2 start npm --name "resume_builder_back" -- start
 
-            # Persist process list so it restarts on reboot (pm2 must be installed globally)
             pm2 save
-
             echo "===== Deploy finished: $(date) ====="
