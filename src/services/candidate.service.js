@@ -82,9 +82,8 @@ async function updateCandidateById(candidateId, updateData) {
   const allowedFields = [
     "full_name",
     "email",
-    "phone",
-    "location",
-    "bio",
+    "phone_no",
+    "address",
     "skills",
     "work_experience",
     "education",
@@ -98,7 +97,7 @@ async function updateCandidateById(candidateId, updateData) {
 
   // Filter updateData to only include allowed fields
   const allowed = {};
-  allowedFields.forEach(field => {
+  allowedFields.forEach((field) => {
     if (updateData.hasOwnProperty(field)) {
       allowed[field] = updateData[field];
     }
@@ -220,6 +219,8 @@ function buildResumePrompt(
     candidate_name,
     job_category_id,
     email = "",
+    phone_no = "",
+    address = "",
     seniority_level = "",
     country_id,
     work_experience = [],
@@ -235,6 +236,9 @@ function buildResumePrompt(
 Candidate Name: ${candidate_name}
 Target Role: ${job_category_name}
 Country: ${country_name} (ISO2: ${country_iso2})
+Email: ${email}
+Phone: ${phone_no}
+Address: ${address}
 
 Work Experience (JSON): ${JSON.stringify(work_experience)}
 Skills (JSON): ${JSON.stringify(skills)}
@@ -255,6 +259,8 @@ JSON Schema:
   "country_id": ${JSON.stringify(country_id)},
   "country_name": ${JSON.stringify(country_name)},
   "email": ${JSON.stringify(email)},
+  "phone_no": ${JSON.stringify(phone_no)},
+  "address": ${JSON.stringify(address)},
   "seniority_level": ${JSON.stringify(seniority_level)},
   "summary": "string",
   "experience": [
@@ -349,6 +355,8 @@ async function generateResumeFromProfile(payload) {
     country_id: parsed.country_id ?? country_id,
     country_name: parsed.country_name || meta.country_name || null,
     email: parsed.email || payload.email || null,
+    phone_no: parsed.phone_no || payload.phone_no || null,
+    address: parsed.address || payload.address || null,
     seniority_level: parsed.seniority_level || payload.seniority_level || null,
     summary: parsed.summary || "",
     experience: Array.isArray(parsed.experience) ? parsed.experience : [],

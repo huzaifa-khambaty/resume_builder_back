@@ -4,6 +4,8 @@ const { z } = require("zod");
 const candidateProfileSchema = z
   .object({
     full_name: z.string().min(1).max(255).optional(),
+    phone_no: z.string().min(4).max(30).optional().nullable(),
+    address: z.string().min(1).max(1000).optional().nullable(),
     country_id: z.string().uuid().optional().nullable(),
     seniority_level: z.string().min(1).max(255).optional().nullable(),
     image_url: z.string().url().optional().nullable(),
@@ -65,6 +67,8 @@ const candidateResumeSchema = z
     job_category_id: z.union([z.string().uuid(), z.number()]),
     country_id: z.union([z.string().uuid(), z.number()]),
     email: z.string().email().optional().nullable(),
+    phone_no: z.string().min(4).max(30).optional().nullable(),
+    address: z.string().min(1).max(1000).optional().nullable(),
     seniority_level: z.string().min(1).optional().nullable(),
     work_experience: z.array(experienceItem).default([]),
     skills: z.array(z.string().min(1)).default([]),
@@ -88,6 +92,8 @@ function validateGenerateResumePayload(body) {
 const resumeUploadSchema = z
   .object({
     full_name: z.string().min(1).max(255),
+    phone_no: z.string().min(4).max(30).optional().nullable(),
+    address: z.string().min(1).max(1000).optional().nullable(),
     seniority_level: z.string().min(1).max(255).optional().nullable(),
     job_category_id: z.string().uuid({ message: "job_category_id must be a valid UUID" }),
     country_id: z.string().uuid({ message: "country_id must be a valid UUID" }),
@@ -113,6 +119,8 @@ function validateResumeUpload(body) {
 const resumeEditSchema = z
   .object({
     full_name: z.string().min(1).max(255).optional(),
+    phone_no: z.string().min(4).max(30).optional().nullable(),
+    address: z.string().min(1).max(1000).optional().nullable(),
     seniority_level: z.string().min(1).max(255).optional().nullable(),
     job_category_id: z.string().uuid({ message: "job_category_id must be a valid UUID" }).optional(),
     country_id: z.string().uuid({ message: "country_id must be a valid UUID" }).optional(),
