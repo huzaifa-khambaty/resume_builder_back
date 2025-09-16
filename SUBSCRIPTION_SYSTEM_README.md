@@ -53,6 +53,7 @@ CREATE TABLE subscription_plans (
 ```
 
 **Indexes:**
+
 - `is_active` (for filtering active plans)
 - `created_at` (for sorting)
 
@@ -79,6 +80,7 @@ CREATE TABLE candidate_subscriptions (
 ```
 
 **Indexes:**
+
 - `candidate_id` (for user subscriptions)
 - `plan_id` (for plan analytics)
 - `status` (for filtering)
@@ -99,6 +101,7 @@ CREATE TABLE subscription_countries (
 ```
 
 **Indexes:**
+
 - `subscription_id` (for subscription details)
 - `country_id` (for country analytics)
 - Unique constraint on `(subscription_id, country_id)`
@@ -108,12 +111,14 @@ CREATE TABLE subscription_countries (
 ### Candidate Endpoints
 
 #### 1. Get Active Subscription Plans
+
 ```http
 GET /api/candidate/subscription-plans
 Authorization: Bearer {jwt_token}
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -124,13 +129,14 @@ Authorization: Bearer {jwt_token}
       "name": "Basic Plan",
       "description": "Access to basic features",
       "duration_days": 30,
-      "price_per_country": 10.00
+      "price_per_country": 10.0
     }
   ]
 }
 ```
 
 #### 2. Calculate Subscription Pricing
+
 ```http
 POST /api/candidate/subscriptions/calculate
 Authorization: Bearer {jwt_token}
@@ -143,16 +149,21 @@ Content-Type: application/json
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
   "message": "Subscription pricing calculated successfully",
   "data": {
-    "plan": { /* plan details */ },
-    "countries": [ /* country details */ ],
+    "plan": {
+      /* plan details */
+    },
+    "countries": [
+      /* country details */
+    ],
     "countryCount": 2,
-    "originalAmount": 20.00,
-    "finalAmount": 20.00,
+    "originalAmount": 20.0,
+    "finalAmount": 20.0,
     "effectiveDurationDays": 30,
     "originalDurationDays": 30,
     "remainingDays": 0,
@@ -164,12 +175,14 @@ Content-Type: application/json
 ```
 
 #### 3. Get Braintree Client Token
+
 ```http
 GET /api/candidate/subscriptions/client-token
 Authorization: Bearer {jwt_token}
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -181,6 +194,7 @@ Authorization: Bearer {jwt_token}
 ```
 
 #### 4. Create Subscription
+
 ```http
 POST /api/candidate/subscriptions
 Authorization: Bearer {jwt_token}
@@ -194,25 +208,34 @@ Content-Type: application/json
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
   "message": "Subscription created successfully",
   "data": {
-    "subscription": { /* complete subscription details */ },
-    "transaction": { /* Braintree transaction details */ },
-    "pricingDetails": { /* pricing calculation details */ }
+    "subscription": {
+      /* complete subscription details */
+    },
+    "transaction": {
+      /* Braintree transaction details */
+    },
+    "pricingDetails": {
+      /* pricing calculation details */
+    }
   }
 }
 ```
 
 #### 5. Get My Subscriptions
+
 ```http
 GET /api/candidate/subscriptions?page=1&limit=10&status=active
 Authorization: Bearer {jwt_token}
 ```
 
 **Query Parameters:**
+
 - `page` (optional): Page number (default: 1)
 - `limit` (optional): Items per page (default: 10, max: 100)
 - `status` (optional): Filter by status (`pending`, `active`, `expired`, `cancelled`)
@@ -220,12 +243,14 @@ Authorization: Bearer {jwt_token}
 - `sortOrder` (optional): `ASC` or `DESC` (default: `DESC`)
 
 #### 6. Get Subscription Details
+
 ```http
 GET /api/candidate/subscriptions/{subscription_id}
 Authorization: Bearer {jwt_token}
 ```
 
 #### 7. Cancel Subscription
+
 ```http
 DELETE /api/candidate/subscriptions/{subscription_id}
 Authorization: Bearer {jwt_token}
@@ -234,16 +259,45 @@ Authorization: Bearer {jwt_token}
 ### Admin Endpoints
 
 #### 1. Get All Subscription Plans
+
 ```http
 GET /api/admin/subscription-plans?page=1&limit=10&is_active=true
 Authorization: Bearer {admin_jwt_token}
 ```
 
 **Query Parameters:**
+
 - `page`, `limit`, `search`, `sortBy`, `sortOrder`: Standard pagination
 - `is_active` (optional): Filter by active status (`true`/`false`)
 
-#### 2. Create Subscription Plan
+#### 2. Get Subscription Plan by ID
+
+```http
+GET /api/admin/subscription-plans/{plan_id}
+Authorization: Bearer {admin_jwt_token}
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "message": "Subscription plan retrieved successfully",
+  "data": {
+    "plan_id": "uuid",
+    "name": "Premium Plan",
+    "description": "Access to premium features",
+    "duration_days": 90,
+    "price_per_country": 25.0,
+    "is_active": true,
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-01T00:00:00Z"
+  }
+}
+```
+
+#### 3. Create Subscription Plan
+
 ```http
 POST /api/admin/subscription-plans
 Authorization: Bearer {admin_jwt_token}
@@ -258,7 +312,8 @@ Content-Type: application/json
 }
 ```
 
-#### 3. Update Subscription Plan
+#### 4. Update Subscription Plan
+
 ```http
 PUT /api/admin/subscription-plans/{plan_id}
 Authorization: Bearer {admin_jwt_token}
@@ -270,17 +325,48 @@ Content-Type: application/json
 }
 ```
 
-#### 4. Get All Subscriptions
+#### 5. Delete Subscription Plan
+
+```http
+DELETE /api/admin/subscription-plans/{plan_id}
+Authorization: Bearer {admin_jwt_token}
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "message": "Subscription plan deleted successfully",
+  "data": {
+    "plan_id": "uuid",
+    "name": "Premium Plan",
+    "is_active": false,
+    "updated_by": "admin_uuid"
+  }
+}
+```
+
+**Business Rules:**
+
+- Plans with active subscriptions cannot be deleted
+- Deletion is soft delete (sets `is_active = false`)
+- Only admin users can delete plans
+
+#### 6. Get All Subscriptions
+
 ```http
 GET /api/admin/subscriptions?page=1&limit=10&status=active
 Authorization: Bearer {admin_jwt_token}
 ```
 
 **Query Parameters:**
+
 - Standard pagination parameters
 - `status`, `candidate_id`, `plan_id`: Filtering options
 
-#### 5. Cancel Any Subscription
+#### 7. Cancel Any Subscription
+
 ```http
 DELETE /api/admin/subscriptions/{subscription_id}
 Authorization: Bearer {admin_jwt_token}
@@ -291,18 +377,22 @@ Authorization: Bearer {admin_jwt_token}
 ### Subscription Pricing Logic
 
 #### 1. Basic Calculation
+
 ```javascript
-totalAmount = plan.price_per_country * countryIds.length
+totalAmount = plan.price_per_country * countryIds.length;
 ```
 
 #### 2. Proration Logic
+
 When a candidate has an active subscription:
+
 - Calculate remaining days in current subscription
 - Limit new subscription duration to remaining days
 - Apply proration factor: `effectiveDays / originalDays`
 - Final amount = `originalAmount * prorationFactor`
 
 #### 3. Date Calculation
+
 - **Start Date**: Current date/time
 - **End Date**: Start date + effective duration days
 - **Effective Duration**: Min(plan duration, remaining days from active subscription)
@@ -310,12 +400,14 @@ When a candidate has an active subscription:
 ### Subscription Status Management
 
 #### Status Flow
+
 1. **pending** → **active** (after successful payment)
 2. **active** → **expired** (after end date)
 3. **active** → **cancelled** (manual cancellation)
 4. **pending** → **cancelled** (failed payment)
 
 #### Payment Status Flow
+
 1. **pending** → **completed** (successful payment)
 2. **pending** → **failed** (payment failure)
 3. **completed** → **refunded** (refund processed)
@@ -323,6 +415,7 @@ When a candidate has an active subscription:
 ### Braintree Customer Management
 
 #### Auto-Provisioning Logic
+
 1. Check if Braintree customer exists using candidate ID
 2. If not found, create customer with:
    - ID: candidate_id
@@ -337,6 +430,7 @@ When a candidate has an active subscription:
 ### Braintree Configuration
 
 Required environment variables:
+
 ```env
 BRAINTREE_ENVIRONMENT=Sandbox  # or Production
 BRAINTREE_MERCHANT_ID=your_merchant_id
@@ -361,8 +455,8 @@ const transactionResult = await braintreeService.processTransaction({
   paymentMethodNonce: paymentNonce,
   customerId: candidateId,
   options: {
-    submitForSettlement: true
-  }
+    submitForSettlement: true,
+  },
 });
 ```
 
@@ -376,30 +470,30 @@ const createPlanSchema = {
     required: true,
     minLength: 2,
     maxLength: 100,
-    unique: true
+    unique: true,
   },
   description: {
     optional: true,
-    maxLength: 1000
+    maxLength: 1000,
   },
   duration_days: {
     required: true,
-    type: 'integer',
+    type: "integer",
     min: 1,
-    max: 365
+    max: 365,
   },
   price_per_country: {
     required: true,
-    type: 'decimal',
+    type: "decimal",
     min: 0,
-    max: 1000
+    max: 1000,
   },
   is_active: {
     optional: true,
-    type: 'boolean',
-    default: true
-  }
-}
+    type: "boolean",
+    default: true,
+  },
+};
 ```
 
 ### Subscription Creation Validation
@@ -408,20 +502,20 @@ const createPlanSchema = {
 const createSubscriptionSchema = {
   plan_id: {
     required: true,
-    type: 'uuid'
+    type: "uuid",
   },
   country_ids: {
     required: true,
-    type: 'array',
+    type: "array",
     minItems: 1,
     maxItems: 50,
-    items: { type: 'uuid' }
+    items: { type: "uuid" },
   },
   payment_method_nonce: {
     required: true,
-    minLength: 1
-  }
-}
+    minLength: 1,
+  },
+};
 ```
 
 ### Query Parameter Validation
@@ -430,23 +524,23 @@ const createSubscriptionSchema = {
 const paginationSchema = {
   page: {
     optional: true,
-    type: 'integer',
+    type: "integer",
     min: 1,
-    default: 1
+    default: 1,
   },
   limit: {
     optional: true,
-    type: 'integer',
+    type: "integer",
     min: 1,
     max: 100,
-    default: 10
+    default: 10,
   },
   sortOrder: {
     optional: true,
-    enum: ['ASC', 'DESC'],
-    default: 'DESC'
-  }
-}
+    enum: ["ASC", "DESC"],
+    default: "DESC",
+  },
+};
 ```
 
 ## Error Handling
@@ -454,6 +548,7 @@ const paginationSchema = {
 ### Common Error Responses
 
 #### 400 Bad Request
+
 ```json
 {
   "success": false,
@@ -469,6 +564,7 @@ const paginationSchema = {
 ```
 
 #### 404 Not Found
+
 ```json
 {
   "success": false,
@@ -477,6 +573,7 @@ const paginationSchema = {
 ```
 
 #### 409 Conflict
+
 ```json
 {
   "success": false,
@@ -486,6 +583,7 @@ const paginationSchema = {
 ```
 
 #### 503 Service Unavailable
+
 ```json
 {
   "success": false,
@@ -497,6 +595,7 @@ const paginationSchema = {
 ### Payment Error Handling
 
 #### Failed Payment
+
 ```json
 {
   "success": false,
@@ -509,6 +608,7 @@ const paginationSchema = {
 ```
 
 #### Braintree Service Errors
+
 - Automatic fallback for customer creation failures
 - Graceful degradation when Braintree is unavailable
 - Comprehensive logging for debugging
@@ -519,37 +619,40 @@ const paginationSchema = {
 
 ```javascript
 // 1. Get client token
-const tokenResponse = await fetch('/api/candidate/subscriptions/client-token', {
-  headers: { 'Authorization': `Bearer ${jwtToken}` }
+const tokenResponse = await fetch("/api/candidate/subscriptions/client-token", {
+  headers: { Authorization: `Bearer ${jwtToken}` },
 });
 const { client_token } = await tokenResponse.json();
 
 // 2. Initialize Braintree Drop-in
-braintree.dropin.create({
-  authorization: client_token,
-  container: '#dropin-container'
-}, (err, instance) => {
-  // 3. Handle form submission
-  document.getElementById('submit-button').addEventListener('click', () => {
-    instance.requestPaymentMethod((err, payload) => {
-      if (err) return;
-      
-      // 4. Create subscription
-      fetch('/api/candidate/subscriptions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${jwtToken}`
-        },
-        body: JSON.stringify({
-          plan_id: selectedPlanId,
-          country_ids: selectedCountryIds,
-          payment_method_nonce: payload.nonce
-        })
+braintree.dropin.create(
+  {
+    authorization: client_token,
+    container: "#dropin-container",
+  },
+  (err, instance) => {
+    // 3. Handle form submission
+    document.getElementById("submit-button").addEventListener("click", () => {
+      instance.requestPaymentMethod((err, payload) => {
+        if (err) return;
+
+        // 4. Create subscription
+        fetch("/api/candidate/subscriptions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${jwtToken}`,
+          },
+          body: JSON.stringify({
+            plan_id: selectedPlanId,
+            country_ids: selectedCountryIds,
+            payment_method_nonce: payload.nonce,
+          }),
+        });
       });
     });
-  });
-});
+  }
+);
 ```
 
 ### Admin Plan Management Example
@@ -557,21 +660,21 @@ braintree.dropin.create({
 ```javascript
 // Create a new subscription plan
 const createPlan = async (planData) => {
-  const response = await fetch('/api/admin/subscription-plans', {
-    method: 'POST',
+  const response = await fetch("/api/admin/subscription-plans", {
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${adminToken}`
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${adminToken}`,
     },
     body: JSON.stringify({
-      name: 'Enterprise Plan',
-      description: 'Full access to all features',
+      name: "Enterprise Plan",
+      description: "Full access to all features",
       duration_days: 365,
-      price_per_country: 50.00,
-      is_active: true
-    })
+      price_per_country: 50.0,
+      is_active: true,
+    }),
   });
-  
+
   return await response.json();
 };
 ```
@@ -582,14 +685,14 @@ const createPlan = async (planData) => {
 // Check subscription status
 const checkSubscriptionStatus = async (candidateId) => {
   const response = await fetch(`/api/candidate/subscriptions?status=active`, {
-    headers: { 'Authorization': `Bearer ${jwtToken}` }
+    headers: { Authorization: `Bearer ${jwtToken}` },
   });
-  
+
   const { data } = await response.json();
-  const activeSubscriptions = data.items.filter(sub => 
-    new Date(sub.end_date) > new Date()
+  const activeSubscriptions = data.items.filter(
+    (sub) => new Date(sub.end_date) > new Date()
   );
-  
+
   return activeSubscriptions;
 };
 ```
@@ -597,16 +700,19 @@ const checkSubscriptionStatus = async (candidateId) => {
 ## Security Considerations
 
 ### Authentication & Authorization
+
 - JWT token validation for all endpoints
 - Separate admin authentication for management endpoints
 - Candidates can only access their own subscriptions
 
 ### Payment Security
+
 - Payment nonces are single-use tokens
 - No sensitive payment data stored in database
 - Braintree handles PCI compliance
 
 ### Data Protection
+
 - UUID primary keys prevent enumeration attacks
 - Soft delete patterns for audit trails
 - Comprehensive logging without sensitive data
@@ -614,6 +720,7 @@ const checkSubscriptionStatus = async (candidateId) => {
 ## Monitoring & Analytics
 
 ### Key Metrics to Track
+
 - Subscription conversion rates
 - Revenue per country
 - Plan popularity
@@ -621,6 +728,7 @@ const checkSubscriptionStatus = async (candidateId) => {
 - Payment failure rates
 
 ### Logging Points
+
 - Subscription creation/cancellation
 - Payment processing events
 - Braintree integration errors
@@ -631,16 +739,19 @@ const checkSubscriptionStatus = async (candidateId) => {
 ### Common Issues
 
 1. **Braintree Configuration**
+
    - Verify environment variables are set
    - Check sandbox vs production environment
    - Validate merchant account status
 
 2. **Payment Failures**
+
    - Check Braintree transaction logs
    - Verify payment method validity
    - Review processor response codes
 
 3. **Proration Calculations**
+
    - Verify active subscription detection
    - Check date calculations
    - Review remaining days logic

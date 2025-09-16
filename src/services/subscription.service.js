@@ -656,11 +656,98 @@ async function cancelSubscription(subscriptionId, userId) {
   }
 }
 
+/**
+ * Soft delete subscription plan (Admin only)
+ * @param {string} planId - Plan ID
+ * @param {string} adminId - Admin user ID
+ * @returns {Promise<Object>} Updated plan
+ */
+async function deleteSubscriptionPlan(planId, adminId) {
+  try {
+    const plan = await SubscriptionPlan.findByPk(planId);
+    if (!plan) {
+      const error = new Error("Subscription plan not found");
+      error.status = 404;
+      throw error;
+    }
+
+    // Check if plan has active subscriptions
+    const activeSubscriptions = await CandidateSubscription.count({
+      where: {
+        plan_id: planId,
+        status: "active",
+        end_date: {
+          [Op.gt]: new Date(),
+        },
+      },
+    });
+
+    if (activeSubscriptions > 0) {
+      const error = new Error(
+        `Cannot delete plan. ${activeSubscriptions} active subscription(s) exist. Deactivate instead.`
+      );
+      error.status = 409;
+      throw error;
+    }
+
+    // Soft delete by setting is_active to false
+    await plan.update({
+      is_active: false,
+      updated_by: adminId,
+    });
+
+    logger?.info?.("Subscription plan soft deleted", {
+      planId: plan.plan_id,
+      adminId,
+    });
+
+    return plan;
+  } catch (error) {
+    logger?.error?.("deleteSubscriptionPlan error", { error: error.message });
+    throw error;
+  }
+}
+
+/**
+ * Get subscription plan by ID
+ * @param {string} planId - Plan ID
+ * @returns {Promise<Object>} Subscription plan details
+ */
+async function getSubscriptionPlanById(planId) {
+  try {
+    const plan = await SubscriptionPlan.findByPk(planId, {
+      attributes: [
+        "plan_id",
+        "name",
+        "description",
+        "duration_days",
+        "price_per_country",
+        "is_active",
+        "created_at",
+        "updated_at",
+      ],
+    });
+
+    if (!plan) {
+      const error = new Error("Subscription plan not found");
+      error.status = 404;
+      throw error;
+    }
+
+    return plan;
+  } catch (error) {
+    logger?.error?.("getSubscriptionPlanById error", { error: error.message });
+    throw error;
+  }
+}
+
 module.exports = {
   getAllSubscriptionPlans,
   getActiveSubscriptionPlans,
+  getSubscriptionPlanById,
   createSubscriptionPlan,
   updateSubscriptionPlan,
+  deleteSubscriptionPlan,
   calculateSubscriptionPricing,
   createCandidateSubscription,
   getCandidateSubscriptions,

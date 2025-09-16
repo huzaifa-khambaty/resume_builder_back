@@ -1,8 +1,10 @@
 const {
   getAllSubscriptionPlans,
   getActiveSubscriptionPlans,
+  getSubscriptionPlanById,
   createSubscriptionPlan,
   updateSubscriptionPlan,
+  deleteSubscriptionPlan,
   calculateSubscriptionPricing,
   createCandidateSubscription,
   getCandidateSubscriptions,
@@ -618,11 +620,72 @@ async function cancelAnySubscription(req, res) {
   }
 }
 
+/**
+ * Get subscription plan by ID (Admin)
+ * GET /api/admin/subscription-plans/:planId
+ */
+async function getPlan(req, res) {
+  try {
+    const { planId } = req.params;
+
+    const plan = await getSubscriptionPlanById(planId);
+
+    return res.status(200).json({
+      success: true,
+      message: "Subscription plan retrieved successfully",
+      data: plan,
+    });
+  } catch (error) {
+    logger?.error?.("getPlan error", { error: error.message });
+    const status = error.status || 500;
+    return res.status(status).json({
+      success: false,
+      message: error.message || "Failed to retrieve subscription plan",
+    });
+  }
+}
+
+/**
+ * Delete subscription plan (Admin)
+ * DELETE /api/admin/subscription-plans/:planId
+ */
+async function deletePlan(req, res) {
+  try {
+    const { planId } = req.params;
+
+    // Get admin ID from the authenticated admin
+    const adminId = req.admin?.user_id;
+    if (!adminId) {
+      return res.status(401).json({
+        success: false,
+        message: "Admin authentication required",
+      });
+    }
+
+    const plan = await deleteSubscriptionPlan(planId, adminId);
+
+    return res.status(200).json({
+      success: true,
+      message: "Subscription plan deleted successfully",
+      data: plan,
+    });
+  } catch (error) {
+    logger?.error?.("deletePlan error", { error: error.message });
+    const status = error.status || 500;
+    return res.status(status).json({
+      success: false,
+      message: error.message || "Failed to delete subscription plan",
+    });
+  }
+}
+
 module.exports = {
   // Admin controllers
   getAllPlans,
+  getPlan,
   createPlan,
   updatePlan,
+  deletePlan,
   getAllSubscriptions,
   cancelAnySubscription,
 
