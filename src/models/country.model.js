@@ -36,5 +36,13 @@ module.exports = (sequelize, DataTypes) => {
       underscored: true,
     }
   );
+
+  Country.associate = (models) => {
+    Country.hasMany(models.SubscriptionCountry, {
+      foreignKey: "country_id",
+      as: "subscription_countries",
+    });
+  };
+
   return Country;
 };

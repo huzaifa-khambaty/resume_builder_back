@@ -8,6 +8,7 @@ const {
 const {
   updateCandidateById,
   generateResumeFromProfile,
+  getJobListForCandidate,
 } = require("../services/candidate.service");
 const {
   uploadResume,
@@ -595,6 +596,31 @@ async function downloadCurrentResume(req, res) {
   }
 }
 
+// GET /api/candidate/job-list
+async function getJobList(req, res) {
+  try {
+    const candidateId = req.candidate.candidate_id;
+    const jobListData = await getJobListForCandidate(candidateId);
+
+    return res.status(200).json({
+      success: true,
+      message: "Job list retrieved successfully",
+      ...jobListData,
+    });
+  } catch (error) {
+    logger?.error?.("getJobList error", {
+      error: error.message,
+      candidateId: req.candidate?.candidate_id,
+    });
+
+    const status = error.status || 500;
+    return res.status(status).json({
+      success: false,
+      message: error.message || "Failed to retrieve job list",
+    });
+  }
+}
+
 module.exports = {
   updateCandidateProfile,
   generateResume,
@@ -602,4 +628,5 @@ module.exports = {
   editResumeFile,
   downloadResumeFile,
   downloadCurrentResume,
+  getJobList,
 };

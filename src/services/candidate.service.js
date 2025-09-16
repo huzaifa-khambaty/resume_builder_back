@@ -1,7 +1,8 @@
 const { v4: uuidv4 } = require("uuid");
-const { Candidate, Country, JobCategory } = require("../models");
+const { Candidate, Country, JobCategory, Job, Employer } = require("../models");
 const PaginationService = require("./pagination.service");
 const bcrypt = require("bcryptjs");
+const { Op } = require("sequelize");
 
 /**
  * Find candidate by email
@@ -365,6 +366,85 @@ async function generateResumeFromProfile(payload) {
   };
 }
 
+/**
+ * Get jobs by candidate's job category with country aggregation
+ * @param {string} candidateId
+ * @returns {Promise<Object>} - Returns aggregated job data by country
+ */
+async function getJobListForCandidate(candidateId) {
+  try {
+    // First get the candidate to find their job_category_id
+    const candidate = await findCandidateById(candidateId);
+    if (!candidate) {
+      const err = new Error("Candidate not found");
+      err.status = 404;
+      throw err;
+    }
+
+    if (!candidate.job_category_id) {
+      const err = new Error("Candidate has no job category assigned");
+      err.status = 400;
+      throw err;
+    }
+
+    // Get all jobs for the candidate's job category, grouped by country
+    const jobsData = await Job.findAll({
+      where: {
+        job_category_id: candidate.job_category_id,
+      },
+      include: [
+        {
+          model: Employer,
+          as: "employer",
+          attributes: ["employer_id", "country_id"],
+          include: [
+            {
+              model: Country,
+              as: "country",
+              attributes: ["country_id", "country", "country_code"],
+            },
+          ],
+        },
+      ],
+      attributes: ["job_id", "no_of_vacancies"],
+    });
+
+    // Group jobs by country and count total vacancies
+    const countryJobMap = new Map();
+
+    jobsData.forEach((job) => {
+      if (job.employer && job.employer.country) {
+        const country = job.employer.country;
+        const key = country.country_id;
+
+        if (countryJobMap.has(key)) {
+          const existing = countryJobMap.get(key);
+          existing.no_of_jobs += job.no_of_vacancies || 1;
+        } else {
+          countryJobMap.set(key, {
+            country_code: country.country_code,
+            country_name: country.country,
+            no_of_jobs: job.no_of_vacancies || 1,
+          });
+        }
+      }
+    });
+
+    // Convert map to array
+    const result = Array.from(countryJobMap.values());
+
+    return {
+      data: {
+        job_category_id: candidate.job_category_id,
+        job_category_name: candidate.job_category?.job_category || null,
+        list: result,
+      },
+    };
+  } catch (error) {
+    throw error;
+  }
+}
+
 module.exports = {
   findCandidateByEmail,
   createCandidate,
@@ -379,4 +459,6 @@ module.exports = {
   buildResumePrompt,
   callOpenAIForResume,
   generateResumeFromProfile,
+  // job list export
+  getJobListForCandidate,
 };

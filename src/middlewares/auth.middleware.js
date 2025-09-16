@@ -109,6 +109,7 @@ async function checkAdminAuth(req, res, next) {
     }
 
     const userId = decoded?.user_id;
+    console.log("decoded ", decoded);
     if (!userId) {
       return res
         .status(401)
