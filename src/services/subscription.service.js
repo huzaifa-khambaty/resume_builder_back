@@ -23,8 +23,8 @@ async function getAllSubscriptionPlans(options = {}) {
       page: options.page,
       limit: options.limit,
       search: options.search,
-      sortBy: options.sortBy || "created_at",
-      sortOrder: options.sortOrder || "DESC",
+      sortBy: options.sortBy || "price_per_country",
+      sortOrder: options.sortOrder || "ASC",
       attributes: [
         "plan_id",
         "name",
