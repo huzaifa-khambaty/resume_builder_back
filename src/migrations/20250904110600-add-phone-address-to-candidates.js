@@ -14,6 +14,8 @@ module.exports = {
       allowNull: true,
       after: 'phone_no',
     });
+    
+
   },
 
   async down(queryInterface, Sequelize) {

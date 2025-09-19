@@ -89,6 +89,8 @@ module.exports = {
       },
     });
 
+    
+
     // Add indexes for better performance
     await queryInterface.addIndex("candidate_subscriptions", ["candidate_id"]);
     await queryInterface.addIndex("candidate_subscriptions", ["plan_id"]);

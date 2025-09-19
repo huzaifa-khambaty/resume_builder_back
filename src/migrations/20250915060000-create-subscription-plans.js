@@ -62,6 +62,8 @@ module.exports = {
     await queryInterface.addIndex("subscription_plans", ["created_at"]);
   },
 
+  
+
   async down(queryInterface, Sequelize) {
     await queryInterface.dropTable("subscription_plans");
   },
