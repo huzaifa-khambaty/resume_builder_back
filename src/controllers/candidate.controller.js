@@ -8,6 +8,7 @@ const {
 const {
   updateCandidateById,
   generateResumeFromProfile,
+  getJobListForCandidate,
 } = require("../services/candidate.service");
 const {
   uploadResume,
@@ -64,10 +65,32 @@ async function generateResume(req, res) {
         .json({ success: false, message: getValidationErrorMessage(errors) });
     }
 
+    // Persist any updated profile fields before generating the resume
+    try {
+      const candidateId = req.candidate.candidate_id;
+      await updateCandidateById(candidateId, {
+        full_name: cleaned.candidate_name, // map candidate_name -> full_name
+        phone_no: cleaned.phone_no,
+        address: cleaned.address,
+        seniority_level: cleaned.seniority_level,
+        job_category_id: cleaned.job_category_id,
+        country_id: cleaned.country_id,
+        updated_by: candidateId,
+      });
+    } catch (persistError) {
+      // Log and continue; generation should not be blocked by persistence errors
+      logger?.warn?.("generateResume: failed to persist profile fields", {
+        error: persistError.message,
+        candidateId: req.candidate?.candidate_id,
+      });
+    }
+
     const data = await generateResumeFromProfile({
       ...cleaned,
       // ensure email and seniority_level are available to the service/prompt
       email: req?.candidate?.email || cleaned.email,
+      phone_no: req?.candidate?.phone_no || cleaned.phone_no,
+      address: req?.candidate?.address || cleaned.address,
       seniority_level:
         req?.candidate?.seniority_level || cleaned.seniority_level,
     });
@@ -212,6 +235,8 @@ async function uploadResumeFile(req, res) {
     const updateData = {
       resume_key: uploadResult.key,
       full_name: cleaned.full_name,
+      phone_no: cleaned.phone_no,
+      address: cleaned.address,
       seniority_level: cleaned.seniority_level,
       job_category_id: cleaned.job_category_id,
       country_id: cleaned.country_id,
@@ -571,6 +596,31 @@ async function downloadCurrentResume(req, res) {
   }
 }
 
+// GET /api/candidate/job-list
+async function getJobList(req, res) {
+  try {
+    const candidateId = req.candidate.candidate_id;
+    const jobListData = await getJobListForCandidate(candidateId);
+
+    return res.status(200).json({
+      success: true,
+      message: "Job list retrieved successfully",
+      ...jobListData,
+    });
+  } catch (error) {
+    logger?.error?.("getJobList error", {
+      error: error.message,
+      candidateId: req.candidate?.candidate_id,
+    });
+
+    const status = error.status || 500;
+    return res.status(status).json({
+      success: false,
+      message: error.message || "Failed to retrieve job list",
+    });
+  }
+}
+
 module.exports = {
   updateCandidateProfile,
   generateResume,
@@ -578,4 +628,5 @@ module.exports = {
   editResumeFile,
   downloadResumeFile,
   downloadCurrentResume,
+  getJobList,
 };

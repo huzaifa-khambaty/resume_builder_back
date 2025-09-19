@@ -1,5 +1,3 @@
-const { JobCategory, Country } = require("./index");
-
 module.exports = (sequelize, DataTypes) => {
   const Candidate = sequelize.define(
     "Candidate",
@@ -25,11 +23,19 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: false,
       },
+      phone_no: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      address: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
       country_id: {
         type: DataTypes.UUID,
         allowNull: true,
         references: {
-          model: Country,
+          model: "countries",
           key: "country_id",
         },
         onDelete: "RESTRICT",
@@ -95,7 +101,7 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.UUID,
         allowNull: true,
         references: {
-          model: JobCategory,
+          model: "job_categories",
           key: "job_category_id",
         },
       },
@@ -135,6 +141,10 @@ module.exports = (sequelize, DataTypes) => {
     Candidate.belongsTo(models.Country, {
       foreignKey: "country_id",
       as: "country",
+    });
+    Candidate.hasMany(models.CandidateSubscription, {
+      foreignKey: "candidate_id",
+      as: "subscriptions",
     });
   };
 

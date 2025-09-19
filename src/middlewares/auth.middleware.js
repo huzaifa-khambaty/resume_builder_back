@@ -69,8 +69,6 @@ async function checkAuth(req, res, next) {
   }
 }
 
-module.exports = { checkAuth };
-
 /**
  * checkAdminAuth middleware
  * - Verifies Bearer JWT from Authorization header
@@ -138,4 +136,4 @@ async function checkAdminAuth(req, res, next) {
   }
 }
 
-module.exports.checkAdminAuth = checkAdminAuth;
+module.exports = { checkAuth, checkAdminAuth };
