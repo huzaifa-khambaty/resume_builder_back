@@ -55,6 +55,8 @@ module.exports = {
     await queryInterface.addIndex("subscription_countries", ["country_id"]);
   },
 
+
+  
   async down(queryInterface, Sequelize) {
     await queryInterface.dropTable("subscription_countries");
   },

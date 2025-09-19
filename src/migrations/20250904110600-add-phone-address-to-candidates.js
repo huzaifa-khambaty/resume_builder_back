@@ -15,6 +15,7 @@ module.exports = {
       after: 'phone_no',
     });
     
+
   },
 
   async down(queryInterface, Sequelize) {
