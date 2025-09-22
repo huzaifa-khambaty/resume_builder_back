@@ -14,6 +14,13 @@ const {
 const braintreeService = require("../services/braintree.service");
 const logger = require("../config/logger");
 const { getValidationErrorMessage } = require("../utils/errorHelper");
+const {
+  validateCreateSubscriptionPlan,
+  validateUpdateSubscriptionPlan,
+  validateCalculateSubscriptionPricing,
+  validateCreateSubscription,
+  validateAddCountriesToSubscription,
+} = require("../validations/subscription.validation");
 
 // Admin Controllers
 
@@ -679,8 +686,138 @@ async function deletePlan(req, res) {
   }
 }
 
+/**
+ * Braintree webhook handler - Verification (GET)
+ * GET /api/braintree/webhook
+ */
+async function verifyWebhook(req, res) {
+  try {
+    const challenge = req.query.bt_challenge;
+    if (!challenge) {
+      return res.status(400).send("Missing bt_challenge");
+    }
+    const verification = await braintreeService.verifyWebhookChallenge(challenge);
+    return res.status(200).send(verification);
+  } catch (error) {
+    logger?.error?.("verifyWebhook error", { error: error.message });
+    return res.status(500).send("Webhook verification failed");
+  }
+}
+
+/**
+ * Braintree webhook handler - Notification (POST)
+ * POST /api/braintree/webhook
+ */
+async function handleWebhook(req, res) {
+  try {
+    const btSignature = req.body.bt_signature;
+    const btPayload = req.body.bt_payload;
+    if (!btSignature || !btPayload) {
+      return res.status(400).send("Missing webhook body");
+    }
+
+    const notification = await braintreeService.parseWebhookNotification(
+      btSignature,
+      btPayload
+    );
+
+    // Handle subscription events
+    const kind = notification.kind;
+    const subscription = notification?.subscription;
+
+    if (subscription?.id) {
+      const { CandidateSubscription } = require("../models");
+      const existing = await CandidateSubscription.findOne({
+        where: { braintree_subscription_id: subscription.id },
+      });
+
+      if (existing) {
+        let newStatus = existing.status;
+        switch (kind) {
+          case "subscription_charged_successfully":
+            newStatus = "active";
+            break;
+          case "subscription_canceled":
+            newStatus = "cancelled";
+            break;
+          case "subscription_expired":
+            newStatus = "expired";
+            break;
+          case "subscription_charged_unsuccessfully":
+            // keep status but mark payment failed
+            await existing.update({ payment_status: "failed" });
+            break;
+          default:
+            break;
+        }
+        if (newStatus !== existing.status) {
+          await existing.update({ status: newStatus });
+        }
+      }
+    }
+
+    return res.status(200).send("OK");
+  } catch (error) {
+    logger?.error?.("handleWebhook error", { error: error.message });
+    return res.status(500).send("Webhook processing failed");
+  }
+}
+
+/**
+ * Add countries to active subscription (Candidate)
+ * POST /api/candidate/subscriptions/:subscriptionId/add-countries
+ */
+async function addCountries(req, res) {
+  try {
+    if (!process.env.BRAINTREE_MERCHANT_ID) {
+      return res.status(503).json({
+        success: false,
+        message: "Payment system is not configured. Please contact support.",
+        error: "Braintree credentials missing",
+      });
+    }
+
+    const { subscriptionId } = req.params;
+    const candidateId = req.candidate.candidate_id;
+
+    // Validate request body
+    const validation = validateAddCountriesToSubscription(req.body);
+    if (!validation.valid) {
+      return res.status(400).json({
+        success: false,
+        message: "Validation failed",
+        errors: getValidationErrorMessage(validation.errors),
+      });
+    }
+
+    const { country_ids, payment_method_nonce } = validation.cleaned;
+
+    const subscriptionService = require("../services/subscription.service");
+    const result = await subscriptionService.addCountriesToSubscription({
+      candidateId,
+      subscriptionId,
+      countryIds: country_ids,
+      paymentMethodNonce: payment_method_nonce,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Countries added to subscription successfully",
+      data: result,
+    });
+  } catch (error) {
+    logger?.error?.("addCountries error", { error: error.message });
+    const status = error.status || 500;
+    return res.status(status).json({
+      success: false,
+      message: error.message || "Failed to add countries",
+      details: error.details,
+    });
+  }
+}
+
 module.exports = {
-  // Admin controllers
+  // Admin
   getAllPlans,
   getPlan,
   createPlan,
@@ -688,8 +825,7 @@ module.exports = {
   deletePlan,
   getAllSubscriptions,
   cancelAnySubscription,
-
-  // Candidate controllers
+  // Candidate
   getActivePlans,
   calculatePricing,
   getClientToken,
@@ -697,4 +833,9 @@ module.exports = {
   getMySubscriptions,
   getSubscription,
   cancelMySubscription,
+  // Webhooks
+  verifyWebhook,
+  handleWebhook,
+  // Add countries
+  addCountries,
 };

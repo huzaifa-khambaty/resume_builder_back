@@ -8,6 +8,10 @@ const candidateRoute = require("./candidate.route");
 const employerRoute = require("./employer.route");
 const countryRoute = require("./country.route");
 const adminRoute = require("./admin.route");
+const {
+  verifyWebhook,
+  handleWebhook,
+} = require("../controllers/subscription.controller");
 
 router.use("/auth", authRoute);
 router.use("/lookup", lookupRoute);
@@ -20,5 +24,13 @@ router.use("/admin", adminRoute);
 router.get("/health", (req, res) => {
   res.json({ status: "ok", message: "Server is running!!!" });
 });
+
+// Braintree webhook endpoints (no auth)
+router.get("/braintree/webhook", verifyWebhook);
+router.post(
+  "/braintree/webhook",
+  express.urlencoded({ extended: false }),
+  handleWebhook
+);
 
 module.exports = router;

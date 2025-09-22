@@ -160,9 +160,38 @@ async function processTransaction(transactionData) {
         transaction: response.transaction,
       };
     } else {
+      // Enhanced error handling for common payment issues
+      let errorMessage = response.message;
+      
+      // Check for nonce reuse error specifically
+      if (response.errors && response.errors.deepErrors) {
+        const nonceError = response.errors.deepErrors.find(error => 
+          error.code === "91564" || 
+          error.message?.includes("Cannot use a payment_method_nonce more than once")
+        );
+        
+        if (nonceError) {
+          errorMessage = "Payment method has already been used. Please refresh the page and try again.";
+        }
+      }
+      
+      // Check for validation errors on payment method nonce
+      if (response.errors && response.errors.validationErrors && 
+          response.errors.validationErrors.transaction && 
+          response.errors.validationErrors.transaction.paymentMethodNonce) {
+        const nonceValidationError = response.errors.validationErrors.transaction.paymentMethodNonce.find(error =>
+          error.code === "91564" || 
+          error.message?.includes("Cannot use a payment_method_nonce more than once")
+        );
+        
+        if (nonceValidationError) {
+          errorMessage = "Payment method has already been used. Please refresh the page and try again.";
+        }
+      }
+      
       return {
         success: false,
-        message: response.message,
+        message: errorMessage,
         errors: response.errors,
         transaction: response.transaction,
       };
@@ -260,6 +289,53 @@ async function findSubscription(subscriptionId) {
       };
     }
     logger?.error?.("Braintree findSubscription error", {
+      error: error.message,
+    });
+    throw error;
+  }
+}
+
+/**
+ * Verify Braintree webhook challenge
+ * @param {string} challenge
+ * @returns {Promise<string>} verification string
+ */
+async function verifyWebhookChallenge(challenge) {
+  try {
+    if (!gateway) {
+      throw new Error(
+        "Braintree gateway not configured. Please check your environment variables."
+      );
+    }
+    return gateway.webhookNotification.verify(challenge);
+  } catch (error) {
+    logger?.error?.("Braintree verifyWebhookChallenge error", {
+      error: error.message,
+    });
+    throw error;
+  }
+}
+
+/**
+ * Parse Braintree webhook notification
+ * @param {string} btSignature
+ * @param {string} btPayload
+ * @returns {Promise<object>} webhook notification object
+ */
+async function parseWebhookNotification(btSignature, btPayload) {
+  try {
+    if (!gateway) {
+      throw new Error(
+        "Braintree gateway not configured. Please check your environment variables."
+      );
+    }
+    const notification = await gateway.webhookNotification.parse(
+      btSignature,
+      btPayload
+    );
+    return notification;
+  } catch (error) {
+    logger?.error?.("Braintree parseWebhookNotification error", {
       error: error.message,
     });
     throw error;
@@ -425,4 +501,6 @@ module.exports = {
   createPlan,
   updatePlan,
   findPlan,
+  verifyWebhookChallenge,
+  parseWebhookNotification,
 };
