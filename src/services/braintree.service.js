@@ -160,38 +160,9 @@ async function processTransaction(transactionData) {
         transaction: response.transaction,
       };
     } else {
-      // Enhanced error handling for common payment issues
-      let errorMessage = response.message;
-      
-      // Check for nonce reuse error specifically
-      if (response.errors && response.errors.deepErrors) {
-        const nonceError = response.errors.deepErrors.find(error => 
-          error.code === "91564" || 
-          error.message?.includes("Cannot use a payment_method_nonce more than once")
-        );
-        
-        if (nonceError) {
-          errorMessage = "Payment method has already been used. Please refresh the page and try again.";
-        }
-      }
-      
-      // Check for validation errors on payment method nonce
-      if (response.errors && response.errors.validationErrors && 
-          response.errors.validationErrors.transaction && 
-          response.errors.validationErrors.transaction.paymentMethodNonce) {
-        const nonceValidationError = response.errors.validationErrors.transaction.paymentMethodNonce.find(error =>
-          error.code === "91564" || 
-          error.message?.includes("Cannot use a payment_method_nonce more than once")
-        );
-        
-        if (nonceValidationError) {
-          errorMessage = "Payment method has already been used. Please refresh the page and try again.";
-        }
-      }
-      
       return {
         success: false,
-        message: errorMessage,
+        message: response.message,
         errors: response.errors,
         transaction: response.transaction,
       };

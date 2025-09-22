@@ -983,26 +983,6 @@ async function addCountriesToSubscription({
       }
     );
 
-    // Update candidate table with new subscription summary (denormalized columns)
-    try {
-      await Candidate.update(
-        {
-          qty: completeSubscription.country_count,
-          unit_price: completeSubscription.plan?.price_per_country ?? null,
-          expiry_date: completeSubscription.end_date,
-          updated_by: candidateId,
-        },
-        { where: { candidate_id: candidateId } }
-      );
-    } catch (persistErr) {
-      logger?.warn?.("Failed to persist updated subscription summary to Candidate", {
-        candidateId,
-        subscriptionId,
-        error: persistErr.message,
-      });
-      // do not block flow
-    }
-
     return {
       subscription: completeSubscription,
       transaction: transactionResult.transaction,
@@ -1028,6 +1008,190 @@ async function addCountriesToSubscription({
   }
 }
 
+/**
+ * Remove countries from an active subscription
+ * @param {Object} params - Parameters
+ * @param {string} params.candidateId - Candidate ID
+ * @param {string} params.subscriptionId - Subscription ID
+ * @param {string[]} params.countryIds - Array of country IDs to remove
+ * @returns {Object} Updated subscription data
+ */
+async function removeCountriesFromSubscription({
+  candidateId,
+  subscriptionId,
+  countryIds,
+}) {
+  try {
+    // Get subscription with countries
+    const subscription = await CandidateSubscription.findByPk(subscriptionId, {
+      include: [
+        {
+          model: SubscriptionCountry,
+          as: "countries",
+          include: [
+            {
+              model: Country,
+              as: "country",
+              attributes: ["country_id", "country", "country_code"],
+            },
+          ],
+        },
+        {
+          model: SubscriptionPlan,
+          as: "plan",
+          attributes: ["plan_id", "name", "price_per_country"],
+        },
+      ],
+    });
+
+    if (!subscription) {
+      const error = new Error("Subscription not found");
+      error.status = 404;
+      throw error;
+    }
+
+    if (subscription.candidate_id !== candidateId) {
+      const error = new Error(
+        "Forbidden: Subscription does not belong to candidate"
+      );
+      error.status = 403;
+      throw error;
+    }
+
+    if (subscription.status !== "active") {
+      const error = new Error("Only active subscriptions can be modified");
+      error.status = 400;
+      throw error;
+    }
+
+    // Check if subscription has expired
+    const now = new Date();
+    const endDate = new Date(subscription.end_date);
+    if (endDate <= now) {
+      const error = new Error("Subscription has already expired");
+      error.status = 400;
+      throw error;
+    }
+
+    // Get existing country IDs in subscription
+    const existingCountryIds = new Set(
+      (subscription.countries || []).map((c) => c.country_id)
+    );
+
+    // Filter to only remove countries that actually exist in the subscription
+    const toRemove = (countryIds || []).filter(
+      (id) => id && existingCountryIds.has(id)
+    );
+
+    if (!toRemove.length) {
+      const error = new Error("No valid countries to remove from subscription");
+      error.status = 400;
+      throw error;
+    }
+
+    // Check if removing all countries (must keep at least one)
+    const remainingCountries = subscription.countries.filter(
+      (c) => !toRemove.includes(c.country_id)
+    );
+
+    if (remainingCountries.length === 0) {
+      const error = new Error(
+        "Cannot remove all countries. At least one country must remain in the subscription."
+      );
+      error.status = 400;
+      throw error;
+    }
+
+    // Validate countries to remove exist
+    const countries = await Country.findAll({
+      where: { country_id: { [Op.in]: toRemove } },
+    });
+    if (countries.length !== toRemove.length) {
+      const error = new Error("One or more invalid country IDs");
+      error.status = 400;
+      throw error;
+    }
+
+    // Remove countries from subscription
+    await SubscriptionCountry.destroy({
+      where: {
+        subscription_id: subscriptionId,
+        country_id: { [Op.in]: toRemove },
+      },
+    });
+
+    // Update subscription metadata
+    const newCountryCount = remainingCountries.length;
+    await CandidateSubscription.update(
+      {
+        country_count: newCountryCount,
+        updated_by: candidateId,
+      },
+      { where: { subscription_id: subscriptionId } }
+    );
+
+    // Update candidate summary (denormalized columns)
+    try {
+      await Candidate.update(
+        {
+          qty: newCountryCount,
+          updated_by: candidateId,
+        },
+        { where: { candidate_id: candidateId } }
+      );
+    } catch (persistErr) {
+      logger?.warn?.("Failed to persist subscription summary to Candidate", {
+        candidateId,
+        error: persistErr.message,
+      });
+      // do not block flow
+    }
+
+    // Return complete subscription data
+    const completeSubscription = await CandidateSubscription.findByPk(
+      subscriptionId,
+      {
+        include: [
+          {
+            model: SubscriptionPlan,
+            as: "plan",
+            attributes: [
+              "plan_id",
+              "name",
+              "description",
+              "duration_days",
+              "price_per_country",
+            ],
+          },
+          {
+            model: SubscriptionCountry,
+            as: "countries",
+            include: [
+              {
+                model: Country,
+                as: "country",
+                attributes: ["country_id", "country", "country_code"],
+              },
+            ],
+          },
+        ],
+      }
+    );
+
+    return {
+      subscription: completeSubscription,
+      removedCountries: countries,
+      removedCountryCount: toRemove.length,
+      remainingCountryCount: newCountryCount,
+    };
+  } catch (error) {
+    logger?.error?.("removeCountriesFromSubscription error", {
+      error: error.message,
+    });
+    throw error;
+  }
+}
+
 module.exports = {
   getAllSubscriptionPlans,
   getActiveSubscriptionPlans,
@@ -1042,4 +1206,5 @@ module.exports = {
   cancelSubscription,
   calculateRemainingDays,
   addCountriesToSubscription,
+  removeCountriesFromSubscription,
 };

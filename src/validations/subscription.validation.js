@@ -77,6 +77,14 @@ const addCountriesToSubscriptionSchema = z.object({
   payment_method_nonce: z.string().min(1, "Payment method nonce is required"),
 });
 
+// Schema for removing countries from existing subscription
+const removeCountriesFromSubscriptionSchema = z.object({
+  country_ids: z
+    .array(z.string().uuid("Invalid country ID format"))
+    .min(1, "At least one country must be selected")
+    .max(50, "Cannot select more than 50 countries"),
+});
+
 // Query Validations
 const paginationQuerySchema = z.object({
   page: z
@@ -176,6 +184,19 @@ function validateAddCountriesToSubscription(data) {
   }
 }
 
+function validateRemoveCountriesFromSubscription(data) {
+  try {
+    const cleaned = removeCountriesFromSubscriptionSchema.parse(data);
+    return { valid: true, cleaned, errors: null };
+  } catch (error) {
+    return {
+      valid: false,
+      cleaned: null,
+      errors: error.errors,
+    };
+  }
+}
+
 function validatePaginationQuery(data) {
   try {
     const cleaned = paginationQuerySchema.parse(data);
@@ -221,6 +242,7 @@ module.exports = {
   validateCalculateSubscriptionPricing,
   validateCreateSubscription,
   validateAddCountriesToSubscription,
+  validateRemoveCountriesFromSubscription,
   validatePaginationQuery,
   validateSubscriptionQuery,
   validatePlanQuery,

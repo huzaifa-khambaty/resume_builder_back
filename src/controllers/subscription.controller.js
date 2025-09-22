@@ -10,6 +10,7 @@ const {
   getCandidateSubscriptions,
   getSubscriptionById,
   cancelSubscription,
+  removeCountriesFromSubscription,
 } = require("../services/subscription.service");
 const braintreeService = require("../services/braintree.service");
 const logger = require("../config/logger");
@@ -20,6 +21,7 @@ const {
   validateCalculateSubscriptionPricing,
   validateCreateSubscription,
   validateAddCountriesToSubscription,
+  validateRemoveCountriesFromSubscription,
 } = require("../validations/subscription.validation");
 
 // Admin Controllers
@@ -816,6 +818,49 @@ async function addCountries(req, res) {
   }
 }
 
+/**
+ * Remove countries from subscription
+ * DELETE /api/candidate/subscriptions/:subscriptionId/countries
+ */
+async function removeCountries(req, res) {
+  try {
+    const { subscriptionId } = req.params;
+    const candidateId = req.candidate.candidate_id;
+
+    // Validate request body
+    const validation = validateRemoveCountriesFromSubscription(req.body);
+    if (!validation.valid) {
+      return res.status(400).json({
+        success: false,
+        message: "Validation failed",
+        errors: getValidationErrorMessage(validation.errors),
+      });
+    }
+
+    const { country_ids } = validation.cleaned;
+
+    const result = await removeCountriesFromSubscription({
+      candidateId,
+      subscriptionId,
+      countryIds: country_ids,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Countries removed from subscription successfully",
+      data: result,
+    });
+  } catch (error) {
+    logger?.error?.("removeCountries error", { error: error.message });
+    const status = error.status || 500;
+    return res.status(status).json({
+      success: false,
+      message: error.message || "Failed to remove countries",
+      details: error.details,
+    });
+  }
+}
+
 module.exports = {
   // Admin
   getAllPlans,
@@ -836,6 +881,7 @@ module.exports = {
   // Webhooks
   verifyWebhook,
   handleWebhook,
-  // Add countries
+  // Countries
   addCountries,
+  removeCountries,
 };
