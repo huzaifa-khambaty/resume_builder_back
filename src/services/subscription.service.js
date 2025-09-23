@@ -142,6 +142,10 @@ async function createSubscriptionPlan(planData, adminId) {
         });
         // Continue anyway - plan is created in our database
       }
+    } else {
+      logger?.info?.("Braintree not configured, plan created without Braintree plan", {
+        planId: plan.plan_id,
+      });
     }
 
     return plan;
