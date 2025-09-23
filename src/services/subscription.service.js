@@ -140,12 +140,19 @@ async function createSubscriptionPlan(planData, adminId) {
           planId: plan.plan_id,
           error: braintreeError.message,
         });
+
+        throw new Error("Braintree plan creation failed", {
+          cause: braintreeError,
+        });
         // Continue anyway - plan is created in our database
       }
     } else {
-      logger?.info?.("Braintree not configured, plan created without Braintree plan", {
-        planId: plan.plan_id,
-      });
+      logger?.info?.(
+        "Braintree not configured, plan created without Braintree plan",
+        {
+          planId: plan.plan_id,
+        }
+      );
     }
 
     return plan;
