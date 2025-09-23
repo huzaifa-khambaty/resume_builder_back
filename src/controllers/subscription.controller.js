@@ -698,7 +698,9 @@ async function verifyWebhook(req, res) {
     if (!challenge) {
       return res.status(400).send("Missing bt_challenge");
     }
-    const verification = await braintreeService.verifyWebhookChallenge(challenge);
+    const verification = await braintreeService.verifyWebhookChallenge(
+      challenge
+    );
     return res.status(200).send(verification);
   } catch (error) {
     logger?.error?.("verifyWebhook error", { error: error.message });
@@ -728,32 +730,65 @@ async function handleWebhook(req, res) {
     const subscription = notification?.subscription;
 
     if (subscription?.id) {
-      const { CandidateSubscription } = require("../models");
+      const { CandidateSubscription, SubscriptionPlan, Candidate } = require("../models");
       const existing = await CandidateSubscription.findOne({
         where: { braintree_subscription_id: subscription.id },
+        include: [{ model: SubscriptionPlan, as: "plan" }],
       });
 
       if (existing) {
-        let newStatus = existing.status;
+        let updates = {};
         switch (kind) {
-          case "subscription_charged_successfully":
-            newStatus = "active";
+          case "subscription_charged_successfully": {
+            // Extend cycle dates and set payment_status completed
+            const currentEnd = new Date(existing.end_date);
+            const startDate = isNaN(currentEnd) ? new Date() : currentEnd;
+            const endDate = new Date(startDate);
+            const durationDays = Number(existing.plan?.duration_days || 30);
+            endDate.setDate(endDate.getDate() + durationDays);
+
+            const perCountry = parseFloat(existing.plan?.price_per_country || 0);
+            const newCycleAmount = parseFloat((perCountry * existing.country_count).toFixed(2));
+
+            updates = {
+              status: "active",
+              payment_status: "completed",
+              start_date: startDate,
+              end_date: endDate,
+              total_amount: newCycleAmount,
+            };
+
+            await existing.update(updates);
+
+            // Also update candidate denormalized fields
+            try {
+              await Candidate.update(
+                {
+                  expiry_date: endDate,
+                  qty: existing.country_count,
+                  unit_price: perCountry,
+                },
+                { where: { candidate_id: existing.candidate_id } }
+              );
+            } catch {}
             break;
-          case "subscription_canceled":
-            newStatus = "cancelled";
+          }
+          case "subscription_canceled": {
+            updates = { status: "cancelled" };
+            await existing.update(updates);
             break;
-          case "subscription_expired":
-            newStatus = "expired";
+          }
+          case "subscription_expired": {
+            updates = { status: "expired" };
+            await existing.update(updates);
             break;
-          case "subscription_charged_unsuccessfully":
-            // keep status but mark payment failed
+          }
+          case "subscription_charged_unsuccessfully": {
             await existing.update({ payment_status: "failed" });
             break;
+          }
           default:
             break;
-        }
-        if (newStatus !== existing.status) {
-          await existing.update({ status: newStatus });
         }
       }
     }

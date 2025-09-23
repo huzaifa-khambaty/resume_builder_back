@@ -116,10 +116,16 @@ async function createSubscriptionPlan(planData, adminId) {
     // If Braintree is configured, create plan there too
     if (process.env.BRAINTREE_MERCHANT_ID) {
       try {
+        // Map duration_days (days) to Braintree billingFrequency (months)
+        const days = Number(planData.duration_days) || 30;
+        const frequencyMap = { 30: 1, 60: 2, 90: 3, 180: 6, 365: 12 };
+        const billingFrequency = frequencyMap[days] || Math.max(1, Math.round(days / 30));
+
         const braintreePlanResult = await braintreeService.createPlan({
           id: plan.plan_id, // Use our plan UUID as Braintree plan ID
           name: planData.name,
           price: planData.price_per_country.toString(), // Convert to string for Braintree
+          billingFrequency,
         });
 
         if (!braintreePlanResult.success) {
@@ -139,10 +145,6 @@ async function createSubscriptionPlan(planData, adminId) {
         logger?.warn?.("Braintree plan creation failed", {
           planId: plan.plan_id,
           error: braintreeError.message,
-        });
-
-        throw new Error("Braintree plan creation failed", {
-          cause: braintreeError,
         });
         // Continue anyway - plan is created in our database
       }
@@ -437,14 +439,12 @@ async function createCandidateSubscription(subscriptionData) {
       }
     }
 
-    // Process payment
+    // Process payment for the current period
     const transactionResult = await braintreeService.processTransaction({
       amount: pricingResult.finalAmount.toString(),
       paymentMethodNonce,
       customerId: braintreeCustomerId,
-      options: {
-        submitForSettlement: true,
-      },
+      options: { submitForSettlement: true },
     });
 
     if (!transactionResult.success) {
@@ -468,6 +468,51 @@ async function createCandidateSubscription(subscriptionData) {
       payment_status: "completed",
       created_by: candidateId,
     });
+
+    // Vault the payment method for future recurring charges and create Braintree subscription to renew automatically
+    try {
+      const pm = await braintreeService.createPaymentMethod({
+        customerId: braintreeCustomerId,
+        paymentMethodNonce,
+      });
+
+      if (pm?.success && pm.paymentMethod?.token) {
+        // Per-cycle price is based on selected countries at full duration
+        const perCyclePrice = (
+          parseFloat(pricingResult?.plan?.price_per_country || 0) *
+          pricingResult.countryCount
+        ).toFixed(2);
+
+        const btSub = await braintreeService.createSubscription({
+          paymentMethodToken: pm.paymentMethod.token,
+          planId: planId,
+          price: perCyclePrice,
+          // Start next cycle when current one ends
+          firstBillingDate: pricingResult.endDate,
+        });
+
+        if (btSub?.success && btSub.subscription?.id) {
+          await subscription.update({
+            braintree_subscription_id: btSub.subscription.id,
+          });
+        } else {
+          logger?.warn?.("Failed to create Braintree subscription for auto-renewal", {
+            candidateId,
+            planId,
+            errors: btSub?.errors,
+            message: btSub?.message,
+          });
+        }
+      } else {
+        logger?.warn?.("Failed to vault payment method for auto-renewal", {
+          candidateId,
+          error: pm?.message,
+        });
+      }
+    } catch (pmErr) {
+      logger?.warn?.("Auto-renewal setup failed", { error: pmErr.message });
+      // Do not block subscription creation if renewal setup fails
+    }
 
     // Create subscription countries
     const subscriptionCountries = countryIds.map((countryId) => ({
@@ -963,6 +1008,49 @@ async function addCountriesToSubscription({
       updated_by: candidateId,
     });
 
+    // Ensure Braintree subscription reflects new per-cycle price
+    try {
+      const perCyclePrice = (
+        parseFloat(plan.price_per_country) * updatedCountryCount
+      ).toFixed(2);
+
+      if (subscription.braintree_subscription_id) {
+        const upd = await braintreeService.updateSubscription(
+          subscription.braintree_subscription_id,
+          { price: perCyclePrice }
+        );
+        if (!upd?.success) {
+          logger?.warn?.("Failed to update Braintree subscription price", {
+            subscriptionId: subscription.subscription_id,
+            braintreeSubscriptionId: subscription.braintree_subscription_id,
+            message: upd?.message,
+            errors: upd?.errors,
+          });
+        }
+      } else if (paymentMethodNonce) {
+        // Legacy subs without a BT subscription: create one now to enable auto-renewal
+        const pm = await braintreeService.createPaymentMethod({
+          customerId: braintreeCustomerId,
+          paymentMethodNonce,
+        });
+        if (pm?.success && pm.paymentMethod?.token) {
+          const btSub = await braintreeService.createSubscription({
+            paymentMethodToken: pm.paymentMethod.token,
+            planId: subscription.plan_id,
+            price: perCyclePrice,
+            firstBillingDate: subscription.end_date,
+          });
+          if (btSub?.success && btSub.subscription?.id) {
+            await subscription.update({
+              braintree_subscription_id: btSub.subscription.id,
+            });
+          }
+        }
+      }
+    } catch (err) {
+      logger?.warn?.("Auto-renewal price update failed", { error: err.message });
+    }
+
     // Reload with associations
     const completeSubscription = await CandidateSubscription.findByPk(
       subscription.subscription_id,
@@ -1140,6 +1228,28 @@ async function removeCountriesFromSubscription({
       },
       { where: { subscription_id: subscriptionId } }
     );
+
+    // Update recurring price in Braintree if subscription exists
+    try {
+      if (subscription.braintree_subscription_id) {
+        const perCyclePrice = (
+          parseFloat(subscription.plan.price_per_country) * newCountryCount
+        ).toFixed(2);
+        const upd = await braintreeService.updateSubscription(
+          subscription.braintree_subscription_id,
+          { price: perCyclePrice }
+        );
+        if (!upd?.success) {
+          logger?.warn?.("Failed to update Braintree subscription price after removal", {
+            subscriptionId,
+            braintreeSubscriptionId: subscription.braintree_subscription_id,
+            message: upd?.message,
+          });
+        }
+      }
+    } catch (err) {
+      logger?.warn?.("Auto-renewal price update (remove) failed", { error: err.message });
+    }
 
     // Update candidate summary (denormalized columns)
     try {

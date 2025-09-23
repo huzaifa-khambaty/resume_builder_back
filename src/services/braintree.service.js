@@ -22,6 +22,47 @@ if (
   );
 }
 
+/**
+ * Update Braintree subscription (e.g., change price or payment method)
+ * @param {string} subscriptionId
+ * @param {Object} updateData - Supported fields: price, paymentMethodToken
+ * @returns {Promise<Object>} Update result
+ */
+async function updateSubscription(subscriptionId, updateData) {
+  try {
+    if (!gateway) {
+      throw new Error(
+        "Braintree gateway not configured. Please check your environment variables."
+      );
+    }
+
+    const payload = {};
+    if (updateData.price !== undefined) payload.price = updateData.price;
+    if (updateData.paymentMethodToken !== undefined)
+      payload.paymentMethodToken = updateData.paymentMethodToken;
+
+    const response = await gateway.subscription.update(subscriptionId, payload);
+
+    if (response.success) {
+      return {
+        success: true,
+        subscription: response.subscription,
+      };
+    } else {
+      return {
+        success: false,
+        message: response.message,
+        errors: response.errors,
+      };
+    }
+  } catch (error) {
+    logger?.error?.("Braintree updateSubscription error", {
+      error: error.message,
+    });
+    throw error;
+  }
+}
+
 // Braintree configuration
 const gateway = process.env.BRAINTREE_MERCHANT_ID
   ? new braintree.BraintreeGateway({
@@ -185,11 +226,21 @@ async function processTransaction(transactionData) {
  */
 async function createSubscription(subscriptionData) {
   try {
-    const response = await gateway.subscription.create({
+    const payload = {
       paymentMethodToken: subscriptionData.paymentMethodToken,
       planId: subscriptionData.planId,
       price: subscriptionData.price,
-    });
+    };
+
+    if (subscriptionData.firstBillingDate) {
+      payload.firstBillingDate = new Date(subscriptionData.firstBillingDate);
+    }
+
+    if (subscriptionData.numberOfBillingCycles) {
+      payload.numberOfBillingCycles = subscriptionData.numberOfBillingCycles;
+    }
+
+    const response = await gateway.subscription.create(payload);
 
     if (response.success) {
       return {
@@ -373,7 +424,7 @@ async function createPlan(planData) {
       id: planData.id,
       name: planData.name,
       price: planData.price,
-      billingFrequency: 1,
+      billingFrequency: planData.billingFrequency || 1,
       currencyIsoCode: "USD",
     });
 
@@ -468,6 +519,7 @@ module.exports = {
   createSubscription,
   cancelSubscription,
   findSubscription,
+  updateSubscription,
   createPaymentMethod,
   createPlan,
   updatePlan,
