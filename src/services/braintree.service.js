@@ -267,6 +267,53 @@ async function findSubscription(subscriptionId) {
 }
 
 /**
+ * Verify Braintree webhook challenge
+ * @param {string} challenge
+ * @returns {Promise<string>} verification string
+ */
+async function verifyWebhookChallenge(challenge) {
+  try {
+    if (!gateway) {
+      throw new Error(
+        "Braintree gateway not configured. Please check your environment variables."
+      );
+    }
+    return gateway.webhookNotification.verify(challenge);
+  } catch (error) {
+    logger?.error?.("Braintree verifyWebhookChallenge error", {
+      error: error.message,
+    });
+    throw error;
+  }
+}
+
+/**
+ * Parse Braintree webhook notification
+ * @param {string} btSignature
+ * @param {string} btPayload
+ * @returns {Promise<object>} webhook notification object
+ */
+async function parseWebhookNotification(btSignature, btPayload) {
+  try {
+    if (!gateway) {
+      throw new Error(
+        "Braintree gateway not configured. Please check your environment variables."
+      );
+    }
+    const notification = await gateway.webhookNotification.parse(
+      btSignature,
+      btPayload
+    );
+    return notification;
+  } catch (error) {
+    logger?.error?.("Braintree parseWebhookNotification error", {
+      error: error.message,
+    });
+    throw error;
+  }
+}
+
+/**
  * Create payment method
  * @param {Object} paymentMethodData
  * @param {string} paymentMethodData.customerId - Customer ID
@@ -425,4 +472,6 @@ module.exports = {
   createPlan,
   updatePlan,
   findPlan,
+  verifyWebhookChallenge,
+  parseWebhookNotification,
 };
