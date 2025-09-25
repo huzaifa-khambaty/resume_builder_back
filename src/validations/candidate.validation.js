@@ -48,7 +48,7 @@ const experienceItem = z.object({
   location: z.string().min(1),
   start_date: isoDate,
   end_date: z.string().nullable().optional(),
-  description: z.string().min(1),
+  description: z.string().optional().nullable(),
 });
 
 const educationItem = z.object({
@@ -57,7 +57,7 @@ const educationItem = z.object({
   location: z.string().min(1),
   start_date: isoDate,
   end_date: isoDate,
-  description: z.string().min(1),
+  description: z.string().optional().nullable(),
 });
 
 // Candidate resume generation payload schema
@@ -95,7 +95,9 @@ const resumeUploadSchema = z
     phone_no: z.string().min(4).max(30).optional().nullable(),
     address: z.string().min(1).max(1000).optional().nullable(),
     seniority_level: z.string().min(1).max(255).optional().nullable(),
-    job_category_id: z.string().uuid({ message: "job_category_id must be a valid UUID" }),
+    job_category_id: z
+      .string()
+      .uuid({ message: "job_category_id must be a valid UUID" }),
     country_id: z.string().uuid({ message: "country_id must be a valid UUID" }),
     education: z.array(educationItem).optional().default([]),
     skills: z.array(z.string().min(1)).optional().default([]),
@@ -122,8 +124,14 @@ const resumeEditSchema = z
     phone_no: z.string().min(4).max(30).optional().nullable(),
     address: z.string().min(1).max(1000).optional().nullable(),
     seniority_level: z.string().min(1).max(255).optional().nullable(),
-    job_category_id: z.string().uuid({ message: "job_category_id must be a valid UUID" }).optional(),
-    country_id: z.string().uuid({ message: "country_id must be a valid UUID" }).optional(),
+    job_category_id: z
+      .string()
+      .uuid({ message: "job_category_id must be a valid UUID" })
+      .optional(),
+    country_id: z
+      .string()
+      .uuid({ message: "country_id must be a valid UUID" })
+      .optional(),
     education: z.array(educationItem).optional().default([]),
     skills: z.array(z.string().min(1)).optional().default([]),
     work_experience: z.array(experienceItem).optional().default([]),
@@ -145,10 +153,13 @@ function validateResumeEdit(body) {
 // Resume download validation schema
 const resumeDownloadSchema = z
   .object({
-    key: z.string().min(1, "Resume key is required").regex(
-      /^resumes\/[a-f0-9-]{36}\/[^\/]+$/,
-      "Invalid resume key format. Expected: resumes/{uuid}/{filename}"
-    ),
+    key: z
+      .string()
+      .min(1, "Resume key is required")
+      .regex(
+        /^resumes\/[a-f0-9-]{36}\/[^\/]+$/,
+        "Invalid resume key format. Expected: resumes/{uuid}/{filename}"
+      ),
   })
   .strict();
 
