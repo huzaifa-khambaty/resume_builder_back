@@ -408,7 +408,6 @@ async function getJobListForCandidate(candidateId) {
       ],
       attributes: ["job_id", "no_of_vacancies"],
     });
-
     // Group jobs by country and count total vacancies
     const countryJobMap = new Map();
 
@@ -422,6 +421,7 @@ async function getJobListForCandidate(candidateId) {
           existing.no_of_jobs += job.no_of_vacancies || 1;
         } else {
           countryJobMap.set(key, {
+            country_id: country.country_id,
             country_code: country.country_code,
             country_name: country.country,
             no_of_jobs: job.no_of_vacancies || 1,

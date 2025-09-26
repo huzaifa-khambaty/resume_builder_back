@@ -44,4 +44,7 @@ router.get("/job-list", checkAuth, getJobList);
 // Subscription routes
 router.use("/subscriptions", require("./subscription.route"));
 
+// Simulations routes
+router.use("/simulations", require("./simulation.route"));
+
 module.exports = router;
