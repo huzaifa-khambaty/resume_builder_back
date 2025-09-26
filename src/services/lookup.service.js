@@ -1,3 +1,4 @@
+const { Op } = require("sequelize");
 const { Country, JobCategory } = require("../models");
 const PaginationService = require("./pagination.service");
 
@@ -46,6 +47,52 @@ async function lookup(entity, options = {}) {
     path,
   } = cfg;
 
+  // Optional where clause to support exclusions for specific entities
+  let whereClause = {};
+  if (entity === "countries") {
+    // normalize exclude ids from various possible shapes
+    let excludeIds = [];
+    const rawA = options.exclude_country_ids;
+    const rawB = options["exclude_country_ids[]"]; // support bracket notation
+    const raw = Array.isArray(rawA) || Array.isArray(rawB)
+      ? [...(Array.isArray(rawA) ? rawA : []), ...(Array.isArray(rawB) ? rawB : [])]
+      : (rawA ?? rawB);
+
+    if (raw) {
+      if (Array.isArray(raw)) {
+        excludeIds = raw.filter(Boolean);
+      } else if (typeof raw === "string") {
+        const trimmed = raw.trim();
+        if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+          try {
+            const parsed = JSON.parse(trimmed);
+            if (Array.isArray(parsed)) {
+              excludeIds = parsed.filter(Boolean);
+            }
+          } catch (_) {
+            excludeIds = trimmed
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean);
+          }
+        } else {
+          excludeIds = trimmed
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean);
+        }
+      }
+    }
+
+    if (excludeIds.length > 0) {
+      whereClause = {
+        country_id: {
+          [Op.notIn]: excludeIds,
+        },
+      };
+    }
+  }
+
   const result = await PaginationService.paginate({
     model,
     page: options.page,
@@ -57,6 +104,7 @@ async function lookup(entity, options = {}) {
     searchableFields,
     allowedSortFields,
     path,
+    whereClause,
   });
 
   return result;

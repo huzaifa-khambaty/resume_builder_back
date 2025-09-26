@@ -11,6 +11,9 @@ const {
   getSubscriptionById,
   cancelSubscription,
   removeCountriesFromSubscription,
+  getActiveSubscriptionForCandidate,
+  getSubscriptionCountries,
+  getAvailableCountriesForSubscription,
 } = require("../services/subscription.service");
 const braintreeService = require("../services/braintree.service");
 const logger = require("../config/logger");
@@ -919,4 +922,40 @@ module.exports = {
   // Countries
   addCountries,
   removeCountries,
+  // Convenience
+  async getActiveSubscriptionSummary(req, res) {
+    try {
+      const candidateId = req.candidate.candidate_id;
+      const active = await getActiveSubscriptionForCandidate(candidateId);
+      return res.status(200).json({
+        success: true,
+        message: "Active subscription fetched",
+        data: active,
+      });
+    } catch (error) {
+      logger?.error?.("getActiveSubscriptionSummary error", { error: error.message });
+      return res.status(500).json({ success: false, message: "Failed to fetch active subscription", error: error.message });
+    }
+  },
+  async getSubscriptionCountryLists(req, res) {
+    try {
+      const { subscriptionId } = req.params;
+      // Ensure requester owns the subscription
+      const sub = await getSubscriptionById(subscriptionId);
+      if (sub.candidate_id !== req.candidate.candidate_id) {
+        return res.status(403).json({ success: false, message: "Access denied" });
+      }
+      const current = await getSubscriptionCountries(subscriptionId);
+      const available = await getAvailableCountriesForSubscription(subscriptionId);
+      return res.status(200).json({
+        success: true,
+        message: "Subscription country lists fetched",
+        data: { current, available },
+      });
+    } catch (error) {
+      logger?.error?.("getSubscriptionCountryLists error", { error: error.message });
+      const status = error.status || 500;
+      return res.status(status).json({ success: false, message: error.message || "Failed to fetch country lists" });
+    }
+  },
 };

@@ -444,6 +444,7 @@ async function createCandidateSubscription(subscriptionData) {
       amount: pricingResult.finalAmount.toString(),
       paymentMethodNonce,
       customerId: braintreeCustomerId,
+      orderId: `sub_create_${candidateId}_${Date.now()}`,
       options: { submitForSettlement: true },
     });
 
@@ -973,6 +974,7 @@ async function addCountriesToSubscription({
         amount: finalAmount.toString(),
         paymentMethodNonce,
         customerId: braintreeCustomerId,
+        orderId: `sub_add_${subscription.subscription_id}_${Date.now()}`,
         options: { submitForSettlement: true },
       });
 
@@ -1188,18 +1190,10 @@ async function removeCountriesFromSubscription({
       throw error;
     }
 
-    // Check if removing all countries (must keep at least one)
+    // Determine remaining countries after removal (allow zero)
     const remainingCountries = subscription.countries.filter(
       (c) => !toRemove.includes(c.country_id)
     );
-
-    if (remainingCountries.length === 0) {
-      const error = new Error(
-        "Cannot remove all countries. At least one country must remain in the subscription."
-      );
-      error.status = 400;
-      throw error;
-    }
 
     // Validate countries to remove exist
     const countries = await Country.findAll({
@@ -1328,4 +1322,131 @@ module.exports = {
   calculateRemainingDays,
   addCountriesToSubscription,
   removeCountriesFromSubscription,
+};
+
+/**
+ * Get the currently active subscription for a candidate (if any)
+ * Includes plan and countries
+ * @param {string} candidateId
+ * @returns {Promise<CandidateSubscription|null>}
+ */
+async function getActiveSubscriptionForCandidate(candidateId) {
+  try {
+    const active = await CandidateSubscription.findOne({
+      where: {
+        candidate_id: candidateId,
+        status: "active",
+        end_date: { [Op.gt]: new Date() },
+      },
+      include: [
+        {
+          model: SubscriptionPlan,
+          as: "plan",
+          attributes: [
+            "plan_id",
+            "name",
+            "description",
+            "duration_days",
+            "price_per_country",
+          ],
+        },
+        {
+          model: SubscriptionCountry,
+          as: "countries",
+          include: [
+            {
+              model: Country,
+              as: "country",
+              attributes: ["country_id", "country", "country_code"],
+            },
+          ],
+        },
+      ],
+      order: [["end_date", "DESC"]],
+    });
+
+    return active;
+  } catch (error) {
+    logger?.error?.("getActiveSubscriptionForCandidate error", {
+      error: error.message,
+    });
+    throw error;
+  }
+}
+
+/**
+ * Get list of countries currently in a subscription
+ * @param {string} subscriptionId
+ * @returns {Promise<Array<Country>>}
+ */
+async function getSubscriptionCountries(subscriptionId) {
+  try {
+    const rows = await SubscriptionCountry.findAll({
+      where: { subscription_id: subscriptionId },
+      include: [
+        {
+          model: Country,
+          as: "country",
+          attributes: ["country_id", "country", "country_code"],
+        },
+      ],
+    });
+
+    return rows.map((r) => r.country).filter(Boolean);
+  } catch (error) {
+    logger?.error?.("getSubscriptionCountries error", { error: error.message });
+    throw error;
+  }
+}
+
+/**
+ * Get list of countries NOT yet in a subscription (available to add)
+ * @param {string} subscriptionId
+ * @returns {Promise<Array<Country>>}
+ */
+async function getAvailableCountriesForSubscription(subscriptionId) {
+  try {
+    const rows = await SubscriptionCountry.findAll({
+      where: { subscription_id: subscriptionId },
+      attributes: ["country_id"],
+    });
+    const existingIds = rows.map((r) => r.country_id);
+
+    const whereClause = existingIds.length
+      ? { country_id: { [Op.notIn]: existingIds } }
+      : {};
+
+    const available = await Country.findAll({
+      where: whereClause,
+      attributes: ["country_id", "country", "country_code"],
+      order: [["country", "ASC"]],
+    });
+
+    return available;
+  } catch (error) {
+    logger?.error?.("getAvailableCountriesForSubscription error", {
+      error: error.message,
+    });
+    throw error;
+  }
+}
+
+module.exports = {
+  getAllSubscriptionPlans,
+  getActiveSubscriptionPlans,
+  getSubscriptionPlanById,
+  createSubscriptionPlan,
+  updateSubscriptionPlan,
+  deleteSubscriptionPlan,
+  calculateSubscriptionPricing,
+  createCandidateSubscription,
+  getCandidateSubscriptions,
+  getSubscriptionById,
+  cancelSubscription,
+  calculateRemainingDays,
+  addCountriesToSubscription,
+  removeCountriesFromSubscription,
+  getActiveSubscriptionForCandidate,
+  getSubscriptionCountries,
+  getAvailableCountriesForSubscription,
 };

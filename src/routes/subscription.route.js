@@ -11,6 +11,8 @@ const {
   cancelMySubscription,
   addCountries,
   removeCountries,
+  getActiveSubscriptionSummary,
+  getSubscriptionCountryLists,
 } = require("../controllers/subscription.controller");
 
 // Get active subscription plans
@@ -39,5 +41,9 @@ router.post( "/:subscriptionId/add-countries", checkAuth, addCountries );
 
 // Remove countries from a subscription
 router.delete( "/:subscriptionId/countries", checkAuth, removeCountries );
+
+// Convenience endpoints for front-end simplification
+router.get("/active/summary", checkAuth, getActiveSubscriptionSummary);
+router.get("/:subscriptionId/country-lists", checkAuth, getSubscriptionCountryLists);
 
 module.exports = router;

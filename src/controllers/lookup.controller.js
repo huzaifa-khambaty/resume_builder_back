@@ -18,6 +18,8 @@ const getLookup = async (req, res) => {
       search,
       sortBy,
       sortOrder,
+      exclude_country_ids: req.query.exclude_country_ids,
+      "exclude_country_ids[]": req.query["exclude_country_ids[]"],
     });
 
     return res.status(200).json({

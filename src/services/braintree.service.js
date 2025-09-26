@@ -193,6 +193,16 @@ async function processTransaction(transactionData) {
       transactionOptions.customerId = transactionData.customerId;
     }
 
+    // Provide a unique orderId to avoid Braintree duplicate transaction rejection
+    if (transactionData.orderId) {
+      transactionOptions.orderId = String(transactionData.orderId);
+    } else {
+      // Fallback: generate a simple unique order id per attempt
+      transactionOptions.orderId = `ord_${Date.now()}_${Math.random()
+        .toString(36)
+        .slice(2, 10)}`;
+    }
+
     const response = await gateway.transaction.sale(transactionOptions);
 
     if (response.success) {
