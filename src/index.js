@@ -7,6 +7,7 @@ const router = require("./routes");
 const errorHandler = require("./middlewares/errorHandler.middleware");
 const passport = require("passport");
 require("./config/passport");
+const { start: startSimulationShortlistCron } = require("./jobs/simulationShortlistCron");
 
 const app = express();
 
@@ -30,6 +31,8 @@ async function bootstrap() {
     console.log("Database connection established successfully");
     app.listen(PORT, () => {
       console.log(`Server is running on port ${PORT}`);
+      // Start background cron tasks once the server is up
+      startSimulationShortlistCron();
     });
   } catch (error) {
     console.error("Unable to connect to the database:", error);

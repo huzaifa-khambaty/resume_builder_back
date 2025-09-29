@@ -1,5 +1,13 @@
 const { v4: uuidv4 } = require("uuid");
-const { Candidate, Country, JobCategory, Job, Employer } = require("../models");
+const {
+  Candidate,
+  Country,
+  JobCategory,
+  Job,
+  Employer,
+  CandidateSubscription,
+  SubscriptionCountry,
+} = require("../models");
 const PaginationService = require("./pagination.service");
 const bcrypt = require("bcryptjs");
 const { Op } = require("sequelize");
@@ -369,80 +377,105 @@ async function generateResumeFromProfile(payload) {
 /**
  * Get jobs by candidate's job category with country aggregation
  * @param {string} candidateId
- * @returns {Promise<Object>} - Returns aggregated job data by country
+ * @returns {Promise<Object>} - Aggregated job data split into subscribed and other countries
  */
 async function getJobListForCandidate(candidateId) {
-  try {
-    // First get the candidate to find their job_category_id
-    const candidate = await findCandidateById(candidateId);
-    if (!candidate) {
-      const err = new Error("Candidate not found");
-      err.status = 404;
-      throw err;
-    }
-
-    if (!candidate.job_category_id) {
-      const err = new Error("Candidate has no job category assigned");
-      err.status = 400;
-      throw err;
-    }
-
-    // Get all jobs for the candidate's job category, grouped by country
-    const jobsData = await Job.findAll({
-      where: {
-        job_category_id: candidate.job_category_id,
-      },
-      include: [
-        {
-          model: Employer,
-          as: "employer",
-          attributes: ["employer_id", "country_id"],
-          include: [
-            {
-              model: Country,
-              as: "country",
-              attributes: ["country_id", "country", "country_code"],
-            },
-          ],
-        },
-      ],
-      attributes: ["job_id"],
-    });
-    // Group jobs by country and count total jobs
-    const countryJobMap = new Map();
-
-    jobsData.forEach((job) => {
-      if (job.employer && job.employer.country) {
-        const country = job.employer.country;
-        const key = country.country_id;
-
-        if (countryJobMap.has(key)) {
-          const existing = countryJobMap.get(key);
-          existing.no_of_jobs += 1;
-        } else {
-          countryJobMap.set(key, {
-            country_id: country.country_id,
-            country_code: country.country_code,
-            country_name: country.country,
-            no_of_jobs: 1,
-          });
-        }
-      }
+  // Fetch candidate
+  const candidate = await findCandidateById(candidateId);
+  if (!candidate)
+    throw Object.assign(new Error("Candidate not found"), { status: 404 });
+  if (!candidate.job_category_id)
+    throw Object.assign(new Error("Candidate has no job category assigned"), {
+      status: 400,
     });
 
-    // Convert map to array
-    const result = Array.from(countryJobMap.values());
-
-    return {
-      data: {
-        job_category_id: candidate.job_category_id,
-        job_category_name: candidate.job_category?.job_category || null,
-        list: result,
+  // Fetch jobs for candidate’s job category with country info
+  const jobs = await Job.findAll({
+    where: { job_category_id: candidate.job_category_id },
+    include: [
+      {
+        model: Employer,
+        as: "employer",
+        attributes: ["employer_id", "country_id"],
+        include: [
+          {
+            model: Country,
+            as: "country",
+            attributes: ["country_id", "country", "country_code"],
+          },
+        ],
       },
+    ],
+    attributes: ["job_id"],
+  });
+
+  // Aggregate jobs by country
+  const countryAggregates = jobs.reduce((acc, job) => {
+    const country = job?.employer?.country;
+    if (!country) return acc;
+
+    const existing = acc.get(country.country_id) || {
+      country_id: country.country_id,
+      country_code: country.country_code,
+      country_name: country.country,
+      no_of_jobs: 0,
     };
-  } catch (error) {
-    throw error;
+
+    existing.no_of_jobs += 1;
+    acc.set(country.country_id, existing);
+
+    return acc;
+  }, new Map());
+
+  // Get candidate’s active subscription countries
+  const activeSubCountries = await SubscriptionCountry.findAll({
+    attributes: ["country_id"],
+    include: [
+      {
+        model: CandidateSubscription,
+        as: "subscription",
+        attributes: [],
+        where: {
+          candidate_id: candidate.candidate_id,
+          status: "active",
+          end_date: { [Op.gt]: new Date() },
+        },
+      },
+      {
+        model: Country,
+        as: "country", // 👈 make sure association exists
+        attributes: ["country_id", "country", "country_code"],
+      },
+    ],
+    raw: false, // keep nested objects
+  });
+
+  // Merge subscribed countries (even if job count = 0)
+  for (const sub of activeSubCountries) {
+    const country = sub.country; // will now exist
+    if (!countryAggregates.has(country.country_id)) {
+      countryAggregates.set(country.country_id, {
+        country_id: country.country_id,
+        country_code: country.country_code,
+        country_name: country.country,
+        no_of_jobs: 0,
+      });
+    }
   }
+
+  const result = Array.from(countryAggregates.values());
+
+  const subscribedIds = new Set(
+    activeSubCountries.map((r) => r.country_id).filter(Boolean)
+  );
+
+  // Split subscribed vs other countries
+  const subscribedCountries = result.filter((r) =>
+    subscribedIds.has(r.country_id)
+  );
+  const otherCountries = result.filter((r) => !subscribedIds.has(r.country_id));
+
+  return { subscribedCountries, otherCountries, activeSubCountries };
 }
 
 module.exports = {
