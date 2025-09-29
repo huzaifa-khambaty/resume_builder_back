@@ -627,17 +627,6 @@ async function getJobList(req, res) {
   }
 }
 
-module.exports = {
-  updateCandidateProfile,
-  generateResume,
-  uploadResumeFile,
-  editResumeFile,
-  downloadResumeFile,
-  downloadCurrentResume,
-  getJobList,
-  getEmployersForCandidate,
-};
-
 // GET /api/candidate/employers?country_id=&job_category_id=
 async function getEmployersForCandidate(req, res) {
   try {
@@ -693,3 +682,14 @@ async function getEmployersForCandidate(req, res) {
     });
   }
 }
+
+module.exports = {
+  updateCandidateProfile,
+  generateResume,
+  uploadResumeFile,
+  editResumeFile,
+  downloadResumeFile,
+  downloadCurrentResume,
+  getJobList,
+  getEmployersForCandidate,
+};

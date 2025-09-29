@@ -1,5 +1,7 @@
-const { Simulation } = require("../models");
-const { validateAddSimulation } = require("../validations/simulation.validation");
+const { Simulation, Job, Employer } = require("../models");
+const {
+  validateAddSimulation,
+} = require("../validations/simulation.validation");
 
 async function addSimulation(req, res) {
   try {
@@ -13,21 +15,36 @@ async function addSimulation(req, res) {
       return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
-    const { country_id, job_category_id, no_of_jobs = 0, short_listed = 0 } = cleaned;
+    const { country_id, job_category_id } = cleaned;
+
+    // Calculate no_of_jobs from DB: COUNT of jobs in this country and category
+    const no_of_jobs = await Job.count({
+      where: { job_category_id },
+      include: [
+        {
+          model: Employer,
+          as: "employer",
+          where: { country_id },
+          required: true,
+        },
+      ],
+    });
 
     const row = await Simulation.create({
       candidate_id: candidateId,
       country_id,
       job_category_id,
       no_of_jobs,
-      short_listed,
+      short_listed: 0,
     });
 
     return res.status(201).json({ success: true, data: row });
   } catch (err) {
-    return res
-      .status(500)
-      .json({ success: false, message: "Failed to add simulation", error: err.message });
+    return res.status(500).json({
+      success: false,
+      message: "Failed to add simulation",
+      error: err.message,
+    });
   }
 }
 

@@ -12,6 +12,7 @@ const {
   getJobList,
   getEmployersForCandidate,
 } = require("../controllers/candidate.controller");
+const { addSimulation } = require("../controllers/simulation.controller");
 
 // Configure multer for file upload (memory storage)
 const upload = multer({
@@ -47,6 +48,6 @@ router.get("/employers", checkAuth, getEmployersForCandidate);
 router.use("/subscriptions", require("./subscription.route"));
 
 // Simulations routes
-router.use("/simulations", require("./simulation.route"));
+router.post("/simulations", checkAuth, addSimulation);
 
 module.exports = router;
