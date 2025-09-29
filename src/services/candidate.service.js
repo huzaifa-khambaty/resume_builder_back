@@ -475,7 +475,7 @@ async function getJobListForCandidate(candidateId) {
   );
   const otherCountries = result.filter((r) => !subscribedIds.has(r.country_id));
 
-  return { subscribedCountries, otherCountries, activeSubCountries };
+  return { subscribedCountries, otherCountries };
 }
 
 module.exports = {
