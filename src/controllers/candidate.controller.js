@@ -11,6 +11,12 @@ const {
   getJobListForCandidate,
 } = require("../services/candidate.service");
 const {
+  getEmployersByCountryAndCategory,
+} = require("../services/employer.service");
+const {
+  validateEmployerScrapInput,
+} = require("../validations/employer.validation");
+const {
   uploadResume,
   extractKeyFromUrl,
   deleteFile,
@@ -629,4 +635,61 @@ module.exports = {
   downloadResumeFile,
   downloadCurrentResume,
   getJobList,
+  getEmployersForCandidate,
 };
+
+// GET /api/candidate/employers?country_id=&job_category_id=
+async function getEmployersForCandidate(req, res) {
+  try {
+    // Accept from query primarily
+    const merged = { ...(req.query || {}), ...(req.body || {}) };
+
+    // Explicit required checks for professional messages
+    const missing = [];
+    if (!merged.country_id) missing.push("country_id");
+    if (!merged.job_category_id) missing.push("job_category_id");
+    if (missing.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message:
+          missing.length === 1
+            ? `${missing[0]} is required`
+            : `${missing.join(", ")} are required`,
+      });
+    }
+
+    const { valid, errors, cleaned } = validateEmployerScrapInput(merged);
+    if (!valid) {
+      return res
+        .status(400)
+        .json({ success: false, message: getValidationErrorMessage(errors) });
+    }
+
+    const { country_id, job_category_id } = cleaned;
+    const result = await getEmployersByCountryAndCategory(
+      country_id,
+      job_category_id
+    );
+
+    const items = Array.isArray(result?.employers)
+      ? result.employers.map((e) => ({
+          employer_id: e.employer_id,
+          employer_name: e.employer_name,
+          city: e.city || null,
+        }))
+      : [];
+
+    return res.status(200).json({
+      success: true,
+      message: "Employers fetched successfully",
+      data: items,
+    });
+  } catch (error) {
+    logger?.error?.("getEmployersForCandidate error", { error });
+    const status = error.status || 500;
+    return res.status(status).json({
+      success: false,
+      message: error.message || "Failed to fetch employers",
+    });
+  }
+}

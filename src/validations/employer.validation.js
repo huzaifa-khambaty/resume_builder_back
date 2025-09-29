@@ -3,9 +3,11 @@ const { z } = require("zod");
 // Validate input for employer scraping
 const employerScrapSchema = z
   .object({
-    country_id: z.string().uuid({ message: "country_id must be a valid UUID" }),
+    country_id: z
+      .string({ required_error: "country_id is required" })
+      .uuid({ message: "country_id must be a valid UUID" }),
     job_category_id: z
-      .string()
+      .string({ required_error: "job_category_id is required" })
       .uuid({ message: "job_category_id must be a valid UUID" }),
   })
   .strict();

@@ -10,6 +10,7 @@ const {
   downloadResumeFile,
   downloadCurrentResume,
   getJobList,
+  getEmployersForCandidate,
 } = require("../controllers/candidate.controller");
 
 // Configure multer for file upload (memory storage)
@@ -40,6 +41,7 @@ router.put("/resume/edit", checkAuth, upload.single("resume"), editResumeFile);
 router.get("/resume/download", checkAuth, downloadResumeFile);
 router.get("/resume/current", checkAuth, downloadCurrentResume);
 router.get("/job-list", checkAuth, getJobList);
+router.get("/employers", checkAuth, getEmployersForCandidate);
 
 // Subscription routes
 router.use("/subscriptions", require("./subscription.route"));
