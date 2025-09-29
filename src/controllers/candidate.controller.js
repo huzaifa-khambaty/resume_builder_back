@@ -11,6 +11,12 @@ const {
   getJobListForCandidate,
 } = require("../services/candidate.service");
 const {
+  getCandidateDashboard: getCandidateDashboardService,
+} = require("../services/dashboard.service");
+const {
+  getChartsByJobCategoryDatewise: getChartsByJobCategoryDatewiseService,
+} = require("../services/dashboard.service");
+const {
   getEmployersByCountryAndCategory,
 } = require("../services/employer.service");
 const {
@@ -597,32 +603,6 @@ async function downloadCurrentResume(req, res) {
     return res.status(500).json({
       success: false,
       message: "Failed to generate resume download URL",
-      error: error.message,
-    });
-  }
-}
-
-// GET /api/candidate/job-list
-async function getJobList(req, res) {
-  try {
-    const candidateId = req.candidate.candidate_id;
-    const jobListData = await getJobListForCandidate(candidateId);
-
-    return res.status(200).json({
-      success: true,
-      message: "Job list retrieved successfully",
-      ...jobListData,
-    });
-  } catch (error) {
-    logger?.error?.("getJobList error", {
-      error: error.message,
-      candidateId: req.candidate?.candidate_id,
-    });
-
-    const status = error.status || 500;
-    return res.status(status).json({
-      success: false,
-      message: error.message || "Failed to retrieve job list",
     });
   }
 }
@@ -683,6 +663,141 @@ async function getEmployersForCandidate(req, res) {
   }
 }
 
+// GET /api/candidate/dashboard
+async function getCandidateDashboard(req, res) {
+  try {
+    const candidateId = req.candidate.candidate_id;
+    const agg = await getCandidateDashboardService(candidateId);
+
+    // Transform to requested response shape
+    const candidate = agg.candidate || {};
+    const subscription = agg.subscription || null;
+    const sims = agg.simulations || { items: [] };
+
+    const response = {
+      data: {
+        candidate: {
+          id: candidate.candidate_id,
+          fullName: candidate.full_name,
+          email: candidate.email,
+          country: candidate.country
+            ? {
+                id: candidate.country.country_id,
+                name: candidate.country.country,
+                code: candidate.country.country_code,
+              }
+            : null,
+          jobCategory: candidate.job_category
+            ? {
+                id: candidate.job_category.job_category_id,
+                name: candidate.job_category.job_category,
+              }
+            : null,
+          seniorityLevel: candidate.seniority_level || null,
+          resumeUrl: agg?.resume?.download_url || null,
+        },
+        subscription: subscription
+          ? {
+              id: subscription.subscription_id,
+              status: subscription.status,
+              startDate: subscription.start_date,
+              endDate: subscription.end_date,
+              remainingDays: subscription.remaining_days,
+              countryCount: subscription.country_count,
+              totalAmount: Number(subscription.total_amount || 0),
+              subscribedCountries: (subscription.countries || []).map((c) => ({
+                id: c.country_id,
+                name: c.country,
+              })),
+            }
+          : null,
+        statistics: (() => {
+          const items = Array.isArray(sims.items) ? sims.items : [];
+          const totalAppliedCountries = new Set(items.map((i) => i.country_id))
+            .size;
+          const totalJobsApplied = items.reduce(
+            (sum, i) => sum + Number(i.no_of_jobs || 0),
+            0
+          );
+          const totalJobsShortlisted = items.reduce(
+            (sum, i) => sum + Number(i.short_listed || 0),
+            0
+          );
+          const totalPurchasedCountries = subscription?.country_count || 0;
+          return {
+            totalPurchasedCountries,
+            totalAppliedCountries,
+            totalJobsApplied,
+            totalJobsShortlisted,
+          };
+        })(),
+      },
+    };
+
+    return res.status(200).json(response);
+  } catch (error) {
+    logger?.error?.("getCandidateDashboard error", {
+      error: error.message,
+      candidateId: req.candidate?.candidate_id,
+    });
+    const status = error.status || 500;
+    return res.status(status).json({
+      success: false,
+      message: error.message || "Failed to fetch dashboard",
+    });
+  }
+}
+
+// GET /api/candidate/job-list
+async function getJobList(req, res) {
+  try {
+    const candidateId = req.candidate.candidate_id;
+    const jobListData = await getJobListForCandidate(candidateId);
+
+    return res.status(200).json({
+      success: true,
+      message: "Job list retrieved successfully",
+      ...jobListData,
+    });
+  } catch (error) {
+    logger?.error?.("getJobList error", {
+      error: error.message,
+      candidateId: req.candidate?.candidate_id,
+    });
+
+    const status = error.status || 500;
+    return res.status(status).json({
+      success: false,
+      message: error.message || "Failed to retrieve job list",
+    });
+  }
+}
+
+// GET /api/candidate/charts/:job_category_id
+async function getChartsByJobCategory(req, res) {
+  try {
+    const candidateId = req.candidate.candidate_id;
+    const jobCategoryId = req.params.job_category_id;
+    // Return date-wise chart data on this same route as requested
+    const charts = await getChartsByJobCategoryDatewiseService(
+      candidateId,
+      jobCategoryId
+    );
+    return res.status(200).json({ success: true, data: charts });
+  } catch (error) {
+    logger?.error?.("getChartsByJobCategory error", {
+      error: error.message,
+      candidateId: req.candidate?.candidate_id,
+      jobCategoryId: req.params?.job_category_id,
+    });
+    const status = error.status || 500;
+    return res.status(status).json({
+      success: false,
+      message: error.message || "Failed to fetch charts",
+    });
+  }
+}
+
 module.exports = {
   updateCandidateProfile,
   generateResume,
@@ -692,4 +807,6 @@ module.exports = {
   downloadCurrentResume,
   getJobList,
   getEmployersForCandidate,
+  getCandidateDashboard,
+  getChartsByJobCategory,
 };

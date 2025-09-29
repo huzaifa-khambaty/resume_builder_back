@@ -427,6 +427,10 @@ async function getJobListForCandidate(candidateId) {
     return acc;
   }, new Map());
 
+  // Totals: totalJobs counts all jobs in this job category; jobCategoryName from candidate
+  const totalJobs = jobs.length;
+  const jobCategoryName = candidate.job_category?.job_category || null;
+
   // Get candidate’s active subscription countries
   const activeSubCountries = await SubscriptionCountry.findAll({
     attributes: ["country_id"],
@@ -464,6 +468,8 @@ async function getJobListForCandidate(candidateId) {
   }
 
   const result = Array.from(countryAggregates.values());
+  // totalCountries should include subscribed countries even if no jobs
+  const totalCountries = result.length;
 
   const subscribedIds = new Set(
     activeSubCountries.map((r) => r.country_id).filter(Boolean)
@@ -475,7 +481,13 @@ async function getJobListForCandidate(candidateId) {
   );
   const otherCountries = result.filter((r) => !subscribedIds.has(r.country_id));
 
-  return { subscribedCountries, otherCountries };
+  return {
+    subscribedCountries,
+    otherCountries,
+    totalJobs,
+    jobCategoryName,
+    totalCountries,
+  };
 }
 
 module.exports = {

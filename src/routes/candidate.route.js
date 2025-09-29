@@ -11,6 +11,8 @@ const {
   downloadCurrentResume,
   getJobList,
   getEmployersForCandidate,
+  getCandidateDashboard,
+  getChartsByJobCategory,
 } = require("../controllers/candidate.controller");
 const { addSimulation } = require("../controllers/simulation.controller");
 
@@ -43,6 +45,8 @@ router.get("/resume/download", checkAuth, downloadResumeFile);
 router.get("/resume/current", checkAuth, downloadCurrentResume);
 router.get("/job-list", checkAuth, getJobList);
 router.get("/employers", checkAuth, getEmployersForCandidate);
+router.get("/dashboard", checkAuth, getCandidateDashboard);
+router.get("/charts/:job_category_id", checkAuth, getChartsByJobCategory);
 
 // Subscription routes
 router.use("/subscriptions", require("./subscription.route"));
