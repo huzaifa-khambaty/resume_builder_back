@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 // Assuming admin auth middleware exists or we'll use the same one
 const { checkAdminAuth } = require("../middlewares/auth.middleware");
+const { getDashboardStats } = require("../controllers/admin.controller");
 const {
   getAllPlans,
   getPlan,
@@ -11,6 +12,9 @@ const {
   getAllSubscriptions,
   cancelAnySubscription,
 } = require("../controllers/subscription.controller");
+
+// Admin Dashboard
+router.get("/dashboard", checkAdminAuth, getDashboardStats);
 
 // Subscription Plans Management
 router.get("/subscription-plans", checkAdminAuth, getAllPlans);
