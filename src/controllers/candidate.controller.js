@@ -65,6 +65,50 @@ async function updateCandidateProfile(req, res) {
   }
 }
 
+// POST /api/candidate/resume/parse
+async function parseResumeFromPdf(req, res) {
+  try {
+    if (!req.file) {
+      return res
+        .status(400)
+        .json({ success: false, message: "No resume file uploaded" });
+    }
+
+    if (req.file.mimetype !== "application/pdf") {
+      return res
+        .status(400)
+        .json({ success: false, message: "Only PDF files are allowed" });
+    }
+
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    if (req.file.size > maxSize) {
+      return res.status(400).json({
+        success: false,
+        message: "Resume file size must be less than 5MB",
+      });
+    }
+
+    const { parsePdfResume } = require("../services/resumeParser.service");
+    const parsed = await parsePdfResume(req.file.buffer);
+
+    return res.status(200).json({
+      success: true,
+      message: "Resume parsed successfully",
+      data: parsed,
+    });
+  } catch (error) {
+    logger?.error?.("parseResumeFromPdf error", {
+      error: error.message,
+      candidateId: req.candidate?.candidate_id,
+    });
+    const status = error.status || 500;
+    return res.status(status).json({
+      success: false,
+      message: error.message || "Failed to parse resume",
+    });
+  }
+}
+
 // POST /api/candidate/resume
 async function generateResume(req, res) {
   try {
@@ -809,4 +853,5 @@ module.exports = {
   getEmployersForCandidate,
   getCandidateDashboard,
   getChartsByJobCategory,
+  parseResumeFromPdf,
 };

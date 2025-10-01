@@ -13,6 +13,7 @@ const {
   getEmployersForCandidate,
   getCandidateDashboard,
   getChartsByJobCategory,
+  parseResumeFromPdf,
 } = require("../controllers/candidate.controller");
 const { addSimulation } = require("../controllers/simulation.controller");
 
@@ -39,6 +40,12 @@ router.post(
   checkAuth,
   upload.single("resume"),
   uploadResumeFile
+);
+router.post(
+  "/resume/parse",
+  checkAuth,
+  upload.single("resume"),
+  parseResumeFromPdf
 );
 router.put("/resume/edit", checkAuth, upload.single("resume"), editResumeFile);
 router.get("/resume/download", checkAuth, downloadResumeFile);
