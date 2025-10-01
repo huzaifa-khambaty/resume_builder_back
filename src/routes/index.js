@@ -7,6 +7,7 @@ const userRoute = require("./user.route");
 const candidateRoute = require("./candidate.route");
 const employerRoute = require("./employer.route");
 const countryRoute = require("./country.route");
+const emailRoute = require("./email.route");
 const adminRoute = require("./admin.route");
 const {
   verifyWebhook,
@@ -19,6 +20,7 @@ router.use("/user", userRoute);
 router.use("/candidate", candidateRoute);
 router.use("/employer", employerRoute);
 router.use("/countries", countryRoute);
+router.use("/email", emailRoute);
 router.use("/admin", adminRoute);
 
 router.get("/health", (req, res) => {

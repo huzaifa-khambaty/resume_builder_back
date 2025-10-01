@@ -1,5 +1,4 @@
 require("dotenv").config(); // load environment variables
-
 const cors = require("cors");
 const express = require("express");
 const sequelize = require("./config/sequelize"); // sequelize instance
@@ -7,7 +6,12 @@ const router = require("./routes");
 const errorHandler = require("./middlewares/errorHandler.middleware");
 const passport = require("passport");
 require("./config/passport");
-const { start: startSimulationShortlistCron } = require("./jobs/simulationShortlistCron");
+const {
+  start: startSimulationShortlistCron,
+} = require("./jobs/simulationShortlistCron");
+const {
+  start: startWeeklyCountryCampaign,
+} = require("./jobs/weeklyCountryCampaign");
 
 const app = express();
 
@@ -33,6 +37,7 @@ async function bootstrap() {
       console.log(`Server is running on port ${PORT}`);
       // Start background cron tasks once the server is up
       startSimulationShortlistCron();
+      startWeeklyCountryCampaign();
     });
   } catch (error) {
     console.error("Unable to connect to the database:", error);
