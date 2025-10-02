@@ -12,6 +12,9 @@ const {
 const {
   start: startWeeklyCountryCampaign,
 } = require("./jobs/weeklyCountryCampaign");
+const {
+  start: startSubscribedCountryUpdatesCampaign,
+} = require("./jobs/subscribedCountryUpdatesCampaign");
 
 const app = express();
 
@@ -38,6 +41,7 @@ async function bootstrap() {
       // Start background cron tasks once the server is up
       startSimulationShortlistCron();
       startWeeklyCountryCampaign();
+      startSubscribedCountryUpdatesCampaign();
     });
   } catch (error) {
     console.error("Unable to connect to the database:", error);

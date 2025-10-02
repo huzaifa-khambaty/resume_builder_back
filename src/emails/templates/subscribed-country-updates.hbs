@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="x-ua-compatible" content="ie=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="x-apple-disable-message-reformatting" />
+  <title>{{appName}} • New Jobs in Your Subscribed Countries</title>
+  <style>
+    body,
+    table,
+    td,
+    div,
+    p,
+    a {
+      -webkit-text-size-adjust: 100%;
+      -ms-text-size-adjust: 100%;
+    }
+
+    table,
+    td {
+      mso-table-lspace: 0pt;
+      mso-table-rspace: 0pt;
+    }
+
+    img {
+      -ms-interpolation-mode: bicubic;
+      border: 0;
+      height: auto;
+      line-height: 100%;
+      outline: none;
+      text-decoration: none;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .card {
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15) !important;
+        background: #ffffff !important;
+      }
+    }
+
+    @media screen and (max-width: 600px) {
+      .container {
+        width: 100% !important;
+        max-width: 100% !important;
+      }
+
+      .card {
+        margin: 10px !important;
+      }
+
+      .header-padding {
+        padding: 20px !important;
+      }
+
+      .content-padding {
+        padding: 24px 20px !important;
+      }
+
+      .footer-padding {
+        padding: 0 20px 20px 20px !important;
+      }
+
+      .button {
+        width: 100% !important;
+        text-align: center !important;
+        box-sizing: border-box !important;
+      }
+    }
+
+    .preheader {
+      display: none !important;
+      visibility: hidden;
+      opacity: 0;
+      color: transparent;
+      height: 0;
+      width: 0;
+      overflow: hidden;
+      mso-hide: all;
+      font-size: 1px;
+      line-height: 1px;
+      max-height: 0;
+      max-width: 0;
+    }
+
+    .brand {
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      font-size: 24px;
+      line-height: 1.2;
+      margin: 0;
+    }
+
+    .brand-subtitle {
+      font-size: 14px;
+      line-height: 1.4;
+      margin: 4px 0 0 0;
+      opacity: 0.9;
+    }
+
+    .card {
+      border-radius: 16px;
+      box-shadow: 0 20px 40px rgba(15, 23, 42, 0.08);
+      overflow: hidden;
+      border: 1px solid rgba(226, 232, 240, 0.6);
+    }
+
+    .eyebrow {
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      font-size: 11px;
+      font-weight: 600;
+      color: #7c3aed;
+      margin: 0 0 8px 0;
+      line-height: 1.2;
+    }
+
+    .main-title {
+      font-size: 28px;
+      font-weight: 700;
+      color: #0f172a;
+      margin: 0 0 24px 0;
+      line-height: 1.2;
+      letter-spacing: -0.02em;
+    }
+
+    .lead {
+      color: #475569;
+      font-size: 16px;
+      line-height: 1.6;
+      margin: 0;
+    }
+
+    .muted {
+      color: #64748b;
+      font-size: 14px;
+      line-height: 1.5;
+      margin: 0;
+    }
+
+    .footer-text {
+      color: #94a3b8;
+      font-size: 13px;
+      line-height: 1.5;
+      margin: 0;
+    }
+
+    .link {
+      word-break: break-all;
+      color: #7c3aed;
+      text-decoration: none;
+    }
+
+    .link:hover {
+      text-decoration: underline;
+    }
+
+    .button {
+      display: inline-block;
+      padding: 16px 32px;
+      background: linear-gradient(135deg, #7c3aed 0%, #5a228c 100%);
+      color: #ffffff !important;
+      text-decoration: none;
+      border-radius: 12px;
+      font-weight: 600;
+      font-size: 16px;
+      line-height: 1.2;
+      text-align: center;
+      transition: all 0.2s ease;
+      border: none;
+      box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3);
+    }
+
+    .button:hover {
+      background: linear-gradient(135deg, #6d28d9 0%, #4c1d95 100%);
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(124, 58, 237, 0.4);
+    }
+
+    .button-container {
+      text-align: left;
+      margin: 24px 0;
+    }
+
+    .divider {
+      border: none;
+      border-top: 1px solid #e2e8f0;
+      margin: 24px 0 20px 0;
+      height: 1px;
+    }
+
+    .header-gradient {
+      background: linear-gradient(135deg, #7c3aed 0%, #5a228c 100%);
+    }
+
+    .highlight-box {
+      background: #f5f3ff;
+      border: 1px solid #ddd6fe;
+      border-radius: 8px;
+      padding: 16px;
+      margin: 16px 0;
+    }
+
+    .highlight-text {
+      color: #4c1d95;
+      font-weight: 600;
+      font-size: 14px;
+      margin: 0;
+    }
+
+    .country-section {
+      margin: 20px 0;
+      padding: 16px;
+      background: #f8fafc;
+      border-radius: 8px;
+      border-left: 4px solid #7c3aed;
+    }
+
+    .country-name {
+      font-size: 18px;
+      font-weight: 600;
+      color: #0f172a;
+      margin: 0 0 8px 0;
+    }
+
+    .job-stats {
+      color: #475569;
+      font-size: 14px;
+      margin: 0;
+    }
+  </style>
+</head>
+
+<body
+  style="margin:0; padding:0; background:#f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color:#334155; line-height:1.6;">
+  <!-- Preheader text -->
+  <div class="preheader">New jobs available in your subscribed countries at {{appName}}.</div>
+
+  <!-- Main container -->
+  <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:#f8fafc; min-height:100vh;">
+    <tr>
+      <td align="center" style="padding:40px 20px;">
+
+        <!-- Email card -->
+        <table role="presentation" cellpadding="0" cellspacing="0" width="600" class="card container"
+          style="max-width:600px; width:100%; background:#ffffff;">
+
+          <!-- Header -->
+          <tr>
+            <td class="header-gradient header-padding" style="padding:32px 32px 28px 32px;">
+              <div class="brand" style="color:#ffffff;">{{appName}}</div>
+              <div class="brand-subtitle" style="color:#e9d5ff;">New jobs in your subscribed countries</div>
+            </td>
+          </tr>
+
+          <!-- Main content -->
+          <tr>
+            <td class="content-padding" style="padding:36px 32px;">
+              <div class="eyebrow">Subscription Update</div>
+              <h1 class="main-title">{{totalJobs}} new jobs added!</h1>
+
+              <p class="lead" style="margin-bottom:16px;">Hi {{name}},</p>
+              <p class="lead" style="margin-bottom:20px;">
+                Great news! We've added <strong>{{totalJobs}} new {{jobsText}}</strong> 
+                in your subscribed countries for <strong>{{jobCategory}}</strong> positions.
+              </p>
+
+              {{#if timeWindow}}
+              <div class="highlight-box">
+                <p class="highlight-text">
+                  📅 Jobs added in the last {{timeWindow}} days
+                </p>
+              </div>
+              {{/if}}
+
+              <!-- Country breakdown -->
+              {{#each countryUpdates}}
+              <div class="country-section">
+                <div class="country-name">🌍 {{this.country}}</div>
+                <p class="job-stats">
+                  <strong>{{this.newJobs}} new {{this.newJobsText}}</strong> added
+                  {{#if this.totalJobs}}
+                  • {{this.totalJobs}} total jobs available
+                  {{/if}}
+                </p>
+              </div>
+              {{/each}}
+
+              <div class="button-container">
+                <a href="{{jobsUrl}}" class="button">View all jobs</a>
+              </div>
+
+              <p class="muted" style="margin-bottom:16px;">
+                You're receiving this update because you have an active subscription for these countries. 
+                Your subscription gives you access to apply for jobs in these regions.
+              </p>
+
+              {{#if subscriptionExpiry}}
+              <p class="muted" style="margin-bottom:16px;">
+                📋 <strong>Subscription expires:</strong> {{subscriptionExpiry}}
+              </p>
+              {{/if}}
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td class="footer-padding" style="padding:0 32px 32px 32px;">
+              <hr class="divider" />
+              <p class="footer-text" style="margin-bottom:8px;">© {{year}} NextMatch. All rights reserved.</p>
+              <p class="footer-text" style="margin-bottom:8px;">This is a subscription update from {{appName}}.</p>
+              {{#if unsubscribeUrl}}
+              <p class="footer-text" style="margin-top:8px;">
+                Don't want these emails? <a href="{{unsubscribeUrl}}" class="link">Unsubscribe</a>.
+              </p>
+              {{/if}}
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+
+</html>

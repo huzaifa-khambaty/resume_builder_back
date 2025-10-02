@@ -439,13 +439,13 @@ async function createCandidateSubscription(subscriptionData) {
       }
     }
 
-    // Process payment for the current period
+    // Process payment for the current period and vault the payment method for auto-renewal
     const transactionResult = await braintreeService.processTransaction({
       amount: pricingResult.finalAmount.toString(),
       paymentMethodNonce,
       customerId: braintreeCustomerId,
       orderId: `sub_create_${candidateId}_${Date.now()}`,
-      options: { submitForSettlement: true },
+      options: { submitForSettlement: true, storeInVaultOnSuccess: true },
     });
 
     if (!transactionResult.success) {
@@ -470,14 +470,14 @@ async function createCandidateSubscription(subscriptionData) {
       created_by: candidateId,
     });
 
-    // Vault the payment method for future recurring charges and create Braintree subscription to renew automatically
+    // Use vaulted payment method token from the successful transaction to create Braintree subscription for auto-renewal
     try {
-      const pm = await braintreeService.createPaymentMethod({
-        customerId: braintreeCustomerId,
-        paymentMethodNonce,
-      });
+      const vaultedToken =
+        transactionResult?.transaction?.creditCard?.token ||
+        transactionResult?.transaction?.paypalAccount?.token ||
+        null;
 
-      if (pm?.success && pm.paymentMethod?.token) {
+      if (vaultedToken) {
         // Per-cycle price is based on selected countries at full duration
         const perCyclePrice = (
           parseFloat(pricingResult?.plan?.price_per_country || 0) *
@@ -485,7 +485,7 @@ async function createCandidateSubscription(subscriptionData) {
         ).toFixed(2);
 
         const btSub = await braintreeService.createSubscription({
-          paymentMethodToken: pm.paymentMethod.token,
+          paymentMethodToken: vaultedToken,
           planId: planId,
           price: perCyclePrice,
           // Start next cycle when current one ends
@@ -505,9 +505,9 @@ async function createCandidateSubscription(subscriptionData) {
           });
         }
       } else {
-        logger?.warn?.("Failed to vault payment method for auto-renewal", {
+        logger?.warn?.("No vaulted payment method token returned by transaction; skipping auto-renewal setup", {
           candidateId,
-          error: pm?.message,
+          transactionId: transactionResult?.transaction?.id,
         });
       }
     } catch (pmErr) {
