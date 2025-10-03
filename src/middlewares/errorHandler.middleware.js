@@ -1,8 +1,12 @@
-const logger = require("../config/logger");
+const baseLogger = require("../config/logger");
 
 const errorHandler = (err, req, res, next) => {
+  const requestId = req.id;
+  const logger = req.logger || baseLogger;
+
   // Log the error with Winston
-  logger.error("Error occurred:", {
+  logger.error("Request error", {
+    requestId,
     message: err.message,
     stack: err.stack,
     url: req.url,
@@ -15,12 +19,15 @@ const errorHandler = (err, req, res, next) => {
   const status = err.status || 500;
   const message = err.message || "Internal Server Error";
 
-  // Customize response based on environment
-  if (process.env.NODE_ENV === "production") {
-    res.status(status).json({ error: { message } });
-  } else {
-    res.status(status).json({ error: { message, stack: err.stack } });
-  }
+  const body = {
+    error: {
+      message,
+      ...(process.env.NODE_ENV !== "production" && { stack: err.stack }),
+    },
+    requestId,
+  };
+
+  res.status(status).json(body);
 };
 
 module.exports = errorHandler;

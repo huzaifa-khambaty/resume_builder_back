@@ -220,6 +220,26 @@ npx sequelize-cli db:migrate:undo
 2. Add route definition in `src/routes/`
 3. Import and use in the main routes file
 
+## Logging
+
+- **Library**: Winston with daily-rotating file transports and JSON structure.
+- **Files**: Logs are written to `logs/app-YYYY-MM-DD.log` and errors to `logs/error-YYYY-MM-DD.log`.
+- **Console**: Pretty colored console logs in development.
+- **HTTP request logs**: Morgan piped into Winston with `X-Request-Id` for correlation.
+- **Request context**: Each request gets a `requestId` and a per-request child logger via `requestContext` middleware (`src/middlewares/requestContext.middleware.js`). The `X-Request-Id` header is echoed back in responses.
+- **Error handling**: Centralized in `src/middlewares/errorHandler.middleware.js`, includes `requestId` in both logs and responses.
+- **Process-level safety**: Handlers for `unhandledRejection`, `uncaughtException`, `SIGINT`, `SIGTERM` in `src/index.js`.
+
+Environment:
+- `NODE_ENV=production` lowers console verbosity to `info` and uses JSON everywhere.
+
+View logs:
+```bash
+# tail latest logs
+tail -f logs/app-$(date +%F).log
+tail -f logs/error-$(date +%F).log
+```
+
 ## Troubleshooting
 
 ### Common Issues

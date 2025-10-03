@@ -34,6 +34,7 @@
     "handlebars": "^4.7.8",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.0.2",
+    "morgan": "^1.10.0",
     "node-cron": "^4.2.1",
     "nodemailer": "^7.0.5",
     "passport": "^0.7.0",
@@ -45,6 +46,7 @@
     "sequelize": "^6.37.7",
     "uuid": "^11.1.0",
     "winston": "^3.17.0",
+    "winston-daily-rotate-file": "^4.7.1",
     "zod": "^4.0.17"
   },
   "devDependencies": {

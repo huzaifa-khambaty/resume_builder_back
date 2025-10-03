@@ -7,18 +7,18 @@ if (
   !process.env.BRAINTREE_PUBLIC_KEY ||
   !process.env.BRAINTREE_PRIVATE_KEY
 ) {
-  console.warn(
-    "⚠️  Braintree credentials are missing. Please add them to your .env file:"
-  );
-  console.warn("   BRAINTREE_ENVIRONMENT=Sandbox");
-  console.warn("   BRAINTREE_MERCHANT_ID=your_merchant_id");
-  console.warn("   BRAINTREE_PUBLIC_KEY=your_public_key");
-  console.warn("   BRAINTREE_PRIVATE_KEY=your_private_key");
-  console.warn(
-    "\n   Subscription system will not work without these credentials."
-  );
-  console.warn(
-    "   You can get sandbox credentials from: https://developer.paypal.com/braintree/docs/start/hello-sandbox\n"
+  logger.warn(
+    "Braintree credentials are missing. Please add them to your .env file",
+    {
+      hint_env_vars: [
+        "BRAINTREE_ENVIRONMENT=Sandbox",
+        "BRAINTREE_MERCHANT_ID=your_merchant_id",
+        "BRAINTREE_PUBLIC_KEY=your_public_key",
+        "BRAINTREE_PRIVATE_KEY=your_private_key",
+      ],
+      note:
+        "Subscription system will not work without these credentials. See https://developer.paypal.com/braintree/docs/start/hello-sandbox",
+    }
   );
 }
 
