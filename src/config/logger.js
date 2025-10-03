@@ -1,35 +1,10 @@
 const winston = require("winston");
 const path = require("path");
 const fs = require("fs");
-const { combine, timestamp, printf, colorize, errors, json, prettyPrint } =
+const DailyRotateFile = require("winston-daily-rotate-file");
+
+const { combine, timestamp, printf, colorize, errors, json, splat, align } =
   winston.format;
-
-// Custom transport to prepend logs to file
-class PrependFileTransport extends winston.Transport {
-  constructor(options) {
-    super(options);
-    this.filename = options.filename;
-    this.level = options.level;
-    this.format = options.format;
-  }
-
-  log(info, callback) {
-    const formattedMessage = this.format.transform(info);
-    const logEntry = JSON.stringify(formattedMessage) + ",\n";
-
-    fs.readFile(this.filename, "utf8", (err, data) => {
-      let newContent = logEntry;
-      if (!err && data) {
-        newContent += data;
-      }
-
-      fs.writeFile(this.filename, newContent, (err) => {
-        if (err) return callback(err);
-        callback(null, true);
-      });
-    });
-  }
-}
 
 // Define log levels
 const levels = {
@@ -40,77 +15,80 @@ const levels = {
   debug: 4,
 };
 
-// Define colors
-const colors = {
+// Define colors for console
+winston.addColors({
   error: "red",
   warn: "yellow",
   info: "green",
   http: "magenta",
   debug: "white",
-};
+});
 
-winston.addColors(colors);
+const isProd = process.env.NODE_ENV === "production";
 
-// Formats
+// Pretty console format for dev
 const consoleFormat = combine(
-  timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
   colorize({ all: true }),
-  printf((info) => {
-    const { timestamp, level, message, ...args } = info;
-    let logMessage = `${timestamp} [${level}]: ${message}`;
-    if (Object.keys(args).length > 0) {
-      logMessage += ` ${JSON.stringify(args, null, 2)}`;
-    }
-    return logMessage;
+  timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
+  splat(),
+  align(),
+  printf(({ timestamp, level, message, ...meta }) => {
+    const rest = Object.keys(meta).length ? ` ${JSON.stringify(meta)}` : "";
+    return `${timestamp} [${level}] ${message}${rest}`;
   })
 );
 
+// JSON format for files and prod
 const fileFormat = combine(
-  timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
+  timestamp(),
   errors({ stack: true }),
-  json(),
-  prettyPrint()
+  splat(),
+  json()
 );
 
-// Create logs directory
+// Ensure logs dir exists
 const logsDir = path.join(__dirname, "../../logs");
 if (!fs.existsSync(logsDir)) {
   fs.mkdirSync(logsDir, { recursive: true });
 }
 
-// Initialize empty log files if they don't exist
-const errorLogPath = path.join(logsDir, "error.log");
-
-[errorLogPath].forEach((file) => {
-  if (!fs.existsSync(file)) {
-    fs.writeFileSync(file, "[\n]", "utf8");
-  }
-});
-
-// Transports
 const transports = [
   new winston.transports.Console({
+    level: isProd ? "info" : "debug",
+    handleExceptions: true,
     format: consoleFormat,
-    handleExceptions: true,
   }),
-
-  new PrependFileTransport({
-    filename: errorLogPath,
-    level: "error",
+  new DailyRotateFile({
+    level: "info",
+    dirname: logsDir,
+    filename: "app-%DATE%.log",
+    datePattern: "YYYY-MM-DD",
+    zippedArchive: true,
+    maxSize: "20m",
+    maxFiles: "14d",
     format: fileFormat,
-    handleExceptions: true,
+  }),
+  new DailyRotateFile({
+    level: "error",
+    dirname: logsDir,
+    filename: "error-%DATE%.log",
+    datePattern: "YYYY-MM-DD",
+    zippedArchive: true,
+    maxSize: "20m",
+    maxFiles: "30d",
+    format: fileFormat,
   }),
 ];
 
-// Logger instance
 const logger = winston.createLogger({
-  level: process.env.NODE_ENV === "production" ? "warn" : "debug",
+  level: isProd ? "info" : "debug",
   levels,
   transports,
   exitOnError: false,
+  defaultMeta: { service: "resume-builder-backend" },
 });
 
-// Morgan stream
+// Morgan stream support
 logger.stream = {
   write: (message) => logger.http(message.trim()),
 };

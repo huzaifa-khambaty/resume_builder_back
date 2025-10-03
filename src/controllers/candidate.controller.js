@@ -11,6 +11,18 @@ const {
   getJobListForCandidate,
 } = require("../services/candidate.service");
 const {
+  getCandidateDashboard: getCandidateDashboardService,
+} = require("../services/dashboard.service");
+const {
+  getChartsByJobCategoryDatewise: getChartsByJobCategoryDatewiseService,
+} = require("../services/dashboard.service");
+const {
+  getEmployersByCountryAndCategory,
+} = require("../services/employer.service");
+const {
+  validateEmployerScrapInput,
+} = require("../validations/employer.validation");
+const {
   uploadResume,
   extractKeyFromUrl,
   deleteFile,
@@ -49,6 +61,50 @@ async function updateCandidateProfile(req, res) {
       success: false,
       message: "Failed to update profile",
       error: err.message,
+    });
+  }
+}
+
+// POST /api/candidate/resume/parse
+async function parseResumeFromPdf(req, res) {
+  try {
+    if (!req.file) {
+      return res
+        .status(400)
+        .json({ success: false, message: "No resume file uploaded" });
+    }
+
+    if (req.file.mimetype !== "application/pdf") {
+      return res
+        .status(400)
+        .json({ success: false, message: "Only PDF files are allowed" });
+    }
+
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    if (req.file.size > maxSize) {
+      return res.status(400).json({
+        success: false,
+        message: "Resume file size must be less than 5MB",
+      });
+    }
+
+    const { parsePdfResume } = require("../services/resumeParser.service");
+    const parsed = await parsePdfResume(req.file.buffer);
+
+    return res.status(200).json({
+      success: true,
+      message: "Resume parsed successfully",
+      data: parsed,
+    });
+  } catch (error) {
+    logger?.error?.("parseResumeFromPdf error", {
+      error: error.message,
+      candidateId: req.candidate?.candidate_id,
+    });
+    const status = error.status || 500;
+    return res.status(status).json({
+      success: false,
+      message: error.message || "Failed to parse resume",
     });
   }
 }
@@ -591,7 +647,147 @@ async function downloadCurrentResume(req, res) {
     return res.status(500).json({
       success: false,
       message: "Failed to generate resume download URL",
+    });
+  }
+}
+
+// GET /api/candidate/employers?country_id=&job_category_id=
+async function getEmployersForCandidate(req, res) {
+  try {
+    // Accept from query primarily
+    const merged = { ...(req.query || {}), ...(req.body || {}) };
+
+    // Explicit required checks for professional messages
+    const missing = [];
+    if (!merged.country_id) missing.push("country_id");
+    if (!merged.job_category_id) missing.push("job_category_id");
+    if (missing.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message:
+          missing.length === 1
+            ? `${missing[0]} is required`
+            : `${missing.join(", ")} are required`,
+      });
+    }
+
+    const { valid, errors, cleaned } = validateEmployerScrapInput(merged);
+    if (!valid) {
+      return res
+        .status(400)
+        .json({ success: false, message: getValidationErrorMessage(errors) });
+    }
+
+    const { country_id, job_category_id } = cleaned;
+    const result = await getEmployersByCountryAndCategory(
+      country_id,
+      job_category_id
+    );
+
+    const items = Array.isArray(result?.employers)
+      ? result.employers.map((e) => ({
+          employer_id: e.employer_id,
+          employer_name: e.employer_name,
+          city: e.city || null,
+        }))
+      : [];
+
+    return res.status(200).json({
+      success: true,
+      message: "Employers fetched successfully",
+      data: items,
+    });
+  } catch (error) {
+    logger?.error?.("getEmployersForCandidate error", { error });
+    const status = error.status || 500;
+    return res.status(status).json({
+      success: false,
+      message: error.message || "Failed to fetch employers",
+    });
+  }
+}
+
+// GET /api/candidate/dashboard
+async function getCandidateDashboard(req, res) {
+  try {
+    const candidateId = req.candidate.candidate_id;
+    const agg = await getCandidateDashboardService(candidateId);
+
+    // Transform to requested response shape
+    const candidate = agg.candidate || {};
+    const subscription = agg.subscription || null;
+    const sims = agg.simulations || { items: [] };
+
+    const response = {
+      data: {
+        candidate: {
+          id: candidate.candidate_id,
+          fullName: candidate.full_name,
+          email: candidate.email,
+          country: candidate.country
+            ? {
+                id: candidate.country.country_id,
+                name: candidate.country.country,
+                code: candidate.country.country_code,
+              }
+            : null,
+          jobCategory: candidate.job_category
+            ? {
+                id: candidate.job_category.job_category_id,
+                name: candidate.job_category.job_category,
+              }
+            : null,
+          seniorityLevel: candidate.seniority_level || null,
+          resumeUrl: agg?.resume?.download_url || null,
+        },
+        subscription: subscription
+          ? {
+              id: subscription.subscription_id,
+              status: subscription.status,
+              startDate: subscription.start_date,
+              endDate: subscription.end_date,
+              remainingDays: subscription.remaining_days,
+              countryCount: subscription.country_count,
+              totalAmount: Number(subscription.total_amount || 0),
+              subscribedCountries: (subscription.countries || []).map((c) => ({
+                id: c.country_id,
+                name: c.country,
+              })),
+            }
+          : null,
+        statistics: (() => {
+          const items = Array.isArray(sims.items) ? sims.items : [];
+          const totalAppliedCountries = new Set(items.map((i) => i.country_id))
+            .size;
+          const totalJobsApplied = items.reduce(
+            (sum, i) => sum + Number(i.no_of_jobs || 0),
+            0
+          );
+          const totalJobsShortlisted = items.reduce(
+            (sum, i) => sum + Number(i.short_listed || 0),
+            0
+          );
+          const totalPurchasedCountries = subscription?.country_count || 0;
+          return {
+            totalPurchasedCountries,
+            totalAppliedCountries,
+            totalJobsApplied,
+            totalJobsShortlisted,
+          };
+        })(),
+      },
+    };
+
+    return res.status(200).json(response);
+  } catch (error) {
+    logger?.error?.("getCandidateDashboard error", {
       error: error.message,
+      candidateId: req.candidate?.candidate_id,
+    });
+    const status = error.status || 500;
+    return res.status(status).json({
+      success: false,
+      message: error.message || "Failed to fetch dashboard",
     });
   }
 }
@@ -621,6 +817,31 @@ async function getJobList(req, res) {
   }
 }
 
+// GET /api/candidate/charts/:job_category_id
+async function getChartsByJobCategory(req, res) {
+  try {
+    const candidateId = req.candidate.candidate_id;
+    const jobCategoryId = req.params.job_category_id;
+    // Return date-wise chart data on this same route as requested
+    const charts = await getChartsByJobCategoryDatewiseService(
+      candidateId,
+      jobCategoryId
+    );
+    return res.status(200).json({ success: true, data: charts });
+  } catch (error) {
+    logger?.error?.("getChartsByJobCategory error", {
+      error: error.message,
+      candidateId: req.candidate?.candidate_id,
+      jobCategoryId: req.params?.job_category_id,
+    });
+    const status = error.status || 500;
+    return res.status(status).json({
+      success: false,
+      message: error.message || "Failed to fetch charts",
+    });
+  }
+}
+
 module.exports = {
   updateCandidateProfile,
   generateResume,
@@ -629,4 +850,8 @@ module.exports = {
   downloadResumeFile,
   downloadCurrentResume,
   getJobList,
+  getEmployersForCandidate,
+  getCandidateDashboard,
+  getChartsByJobCategory,
+  parseResumeFromPdf,
 };

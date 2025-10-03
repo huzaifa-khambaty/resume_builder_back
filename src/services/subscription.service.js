@@ -116,10 +116,16 @@ async function createSubscriptionPlan(planData, adminId) {
     // If Braintree is configured, create plan there too
     if (process.env.BRAINTREE_MERCHANT_ID) {
       try {
+        // Map duration_days (days) to Braintree billingFrequency (months)
+        const days = Number(planData.duration_days) || 30;
+        const frequencyMap = { 30: 1, 60: 2, 90: 3, 180: 6, 365: 12 };
+        const billingFrequency = frequencyMap[days] || Math.max(1, Math.round(days / 30));
+
         const braintreePlanResult = await braintreeService.createPlan({
           id: plan.plan_id, // Use our plan UUID as Braintree plan ID
           name: planData.name,
           price: planData.price_per_country.toString(), // Convert to string for Braintree
+          billingFrequency,
         });
 
         if (!braintreePlanResult.success) {
@@ -139,10 +145,6 @@ async function createSubscriptionPlan(planData, adminId) {
         logger?.warn?.("Braintree plan creation failed", {
           planId: plan.plan_id,
           error: braintreeError.message,
-        });
-
-        throw new Error("Braintree plan creation failed", {
-          cause: braintreeError,
         });
         // Continue anyway - plan is created in our database
       }
@@ -437,14 +439,13 @@ async function createCandidateSubscription(subscriptionData) {
       }
     }
 
-    // Process payment
+    // Process payment for the current period and vault the payment method for auto-renewal
     const transactionResult = await braintreeService.processTransaction({
       amount: pricingResult.finalAmount.toString(),
       paymentMethodNonce,
       customerId: braintreeCustomerId,
-      options: {
-        submitForSettlement: true,
-      },
+      orderId: `sub_create_${candidateId}_${Date.now()}`,
+      options: { submitForSettlement: true, storeInVaultOnSuccess: true },
     });
 
     if (!transactionResult.success) {
@@ -468,6 +469,51 @@ async function createCandidateSubscription(subscriptionData) {
       payment_status: "completed",
       created_by: candidateId,
     });
+
+    // Use vaulted payment method token from the successful transaction to create Braintree subscription for auto-renewal
+    try {
+      const vaultedToken =
+        transactionResult?.transaction?.creditCard?.token ||
+        transactionResult?.transaction?.paypalAccount?.token ||
+        null;
+
+      if (vaultedToken) {
+        // Per-cycle price is based on selected countries at full duration
+        const perCyclePrice = (
+          parseFloat(pricingResult?.plan?.price_per_country || 0) *
+          pricingResult.countryCount
+        ).toFixed(2);
+
+        const btSub = await braintreeService.createSubscription({
+          paymentMethodToken: vaultedToken,
+          planId: planId,
+          price: perCyclePrice,
+          // Start next cycle when current one ends
+          firstBillingDate: pricingResult.endDate,
+        });
+
+        if (btSub?.success && btSub.subscription?.id) {
+          await subscription.update({
+            braintree_subscription_id: btSub.subscription.id,
+          });
+        } else {
+          logger?.warn?.("Failed to create Braintree subscription for auto-renewal", {
+            candidateId,
+            planId,
+            errors: btSub?.errors,
+            message: btSub?.message,
+          });
+        }
+      } else {
+        logger?.warn?.("No vaulted payment method token returned by transaction; skipping auto-renewal setup", {
+          candidateId,
+          transactionId: transactionResult?.transaction?.id,
+        });
+      }
+    } catch (pmErr) {
+      logger?.warn?.("Auto-renewal setup failed", { error: pmErr.message });
+      // Do not block subscription creation if renewal setup fails
+    }
 
     // Create subscription countries
     const subscriptionCountries = countryIds.map((countryId) => ({
@@ -928,6 +974,7 @@ async function addCountriesToSubscription({
         amount: finalAmount.toString(),
         paymentMethodNonce,
         customerId: braintreeCustomerId,
+        orderId: `sub_add_${subscription.subscription_id}_${Date.now()}`,
         options: { submitForSettlement: true },
       });
 
@@ -962,6 +1009,49 @@ async function addCountriesToSubscription({
         subscription.braintree_transaction_id,
       updated_by: candidateId,
     });
+
+    // Ensure Braintree subscription reflects new per-cycle price
+    try {
+      const perCyclePrice = (
+        parseFloat(plan.price_per_country) * updatedCountryCount
+      ).toFixed(2);
+
+      if (subscription.braintree_subscription_id) {
+        const upd = await braintreeService.updateSubscription(
+          subscription.braintree_subscription_id,
+          { price: perCyclePrice }
+        );
+        if (!upd?.success) {
+          logger?.warn?.("Failed to update Braintree subscription price", {
+            subscriptionId: subscription.subscription_id,
+            braintreeSubscriptionId: subscription.braintree_subscription_id,
+            message: upd?.message,
+            errors: upd?.errors,
+          });
+        }
+      } else if (paymentMethodNonce) {
+        // Legacy subs without a BT subscription: create one now to enable auto-renewal
+        const pm = await braintreeService.createPaymentMethod({
+          customerId: braintreeCustomerId,
+          paymentMethodNonce,
+        });
+        if (pm?.success && pm.paymentMethod?.token) {
+          const btSub = await braintreeService.createSubscription({
+            paymentMethodToken: pm.paymentMethod.token,
+            planId: subscription.plan_id,
+            price: perCyclePrice,
+            firstBillingDate: subscription.end_date,
+          });
+          if (btSub?.success && btSub.subscription?.id) {
+            await subscription.update({
+              braintree_subscription_id: btSub.subscription.id,
+            });
+          }
+        }
+      }
+    } catch (err) {
+      logger?.warn?.("Auto-renewal price update failed", { error: err.message });
+    }
 
     // Reload with associations
     const completeSubscription = await CandidateSubscription.findByPk(
@@ -1100,18 +1190,10 @@ async function removeCountriesFromSubscription({
       throw error;
     }
 
-    // Check if removing all countries (must keep at least one)
+    // Determine remaining countries after removal (allow zero)
     const remainingCountries = subscription.countries.filter(
       (c) => !toRemove.includes(c.country_id)
     );
-
-    if (remainingCountries.length === 0) {
-      const error = new Error(
-        "Cannot remove all countries. At least one country must remain in the subscription."
-      );
-      error.status = 400;
-      throw error;
-    }
 
     // Validate countries to remove exist
     const countries = await Country.findAll({
@@ -1140,6 +1222,28 @@ async function removeCountriesFromSubscription({
       },
       { where: { subscription_id: subscriptionId } }
     );
+
+    // Update recurring price in Braintree if subscription exists
+    try {
+      if (subscription.braintree_subscription_id) {
+        const perCyclePrice = (
+          parseFloat(subscription.plan.price_per_country) * newCountryCount
+        ).toFixed(2);
+        const upd = await braintreeService.updateSubscription(
+          subscription.braintree_subscription_id,
+          { price: perCyclePrice }
+        );
+        if (!upd?.success) {
+          logger?.warn?.("Failed to update Braintree subscription price after removal", {
+            subscriptionId,
+            braintreeSubscriptionId: subscription.braintree_subscription_id,
+            message: upd?.message,
+          });
+        }
+      }
+    } catch (err) {
+      logger?.warn?.("Auto-renewal price update (remove) failed", { error: err.message });
+    }
 
     // Update candidate summary (denormalized columns)
     try {
@@ -1218,4 +1322,131 @@ module.exports = {
   calculateRemainingDays,
   addCountriesToSubscription,
   removeCountriesFromSubscription,
+};
+
+/**
+ * Get the currently active subscription for a candidate (if any)
+ * Includes plan and countries
+ * @param {string} candidateId
+ * @returns {Promise<CandidateSubscription|null>}
+ */
+async function getActiveSubscriptionForCandidate(candidateId) {
+  try {
+    const active = await CandidateSubscription.findOne({
+      where: {
+        candidate_id: candidateId,
+        status: "active",
+        end_date: { [Op.gt]: new Date() },
+      },
+      include: [
+        {
+          model: SubscriptionPlan,
+          as: "plan",
+          attributes: [
+            "plan_id",
+            "name",
+            "description",
+            "duration_days",
+            "price_per_country",
+          ],
+        },
+        {
+          model: SubscriptionCountry,
+          as: "countries",
+          include: [
+            {
+              model: Country,
+              as: "country",
+              attributes: ["country_id", "country", "country_code"],
+            },
+          ],
+        },
+      ],
+      order: [["end_date", "DESC"]],
+    });
+
+    return active;
+  } catch (error) {
+    logger?.error?.("getActiveSubscriptionForCandidate error", {
+      error: error.message,
+    });
+    throw error;
+  }
+}
+
+/**
+ * Get list of countries currently in a subscription
+ * @param {string} subscriptionId
+ * @returns {Promise<Array<Country>>}
+ */
+async function getSubscriptionCountries(subscriptionId) {
+  try {
+    const rows = await SubscriptionCountry.findAll({
+      where: { subscription_id: subscriptionId },
+      include: [
+        {
+          model: Country,
+          as: "country",
+          attributes: ["country_id", "country", "country_code"],
+        },
+      ],
+    });
+
+    return rows.map((r) => r.country).filter(Boolean);
+  } catch (error) {
+    logger?.error?.("getSubscriptionCountries error", { error: error.message });
+    throw error;
+  }
+}
+
+/**
+ * Get list of countries NOT yet in a subscription (available to add)
+ * @param {string} subscriptionId
+ * @returns {Promise<Array<Country>>}
+ */
+async function getAvailableCountriesForSubscription(subscriptionId) {
+  try {
+    const rows = await SubscriptionCountry.findAll({
+      where: { subscription_id: subscriptionId },
+      attributes: ["country_id"],
+    });
+    const existingIds = rows.map((r) => r.country_id);
+
+    const whereClause = existingIds.length
+      ? { country_id: { [Op.notIn]: existingIds } }
+      : {};
+
+    const available = await Country.findAll({
+      where: whereClause,
+      attributes: ["country_id", "country", "country_code"],
+      order: [["country", "ASC"]],
+    });
+
+    return available;
+  } catch (error) {
+    logger?.error?.("getAvailableCountriesForSubscription error", {
+      error: error.message,
+    });
+    throw error;
+  }
+}
+
+module.exports = {
+  getAllSubscriptionPlans,
+  getActiveSubscriptionPlans,
+  getSubscriptionPlanById,
+  createSubscriptionPlan,
+  updateSubscriptionPlan,
+  deleteSubscriptionPlan,
+  calculateSubscriptionPricing,
+  createCandidateSubscription,
+  getCandidateSubscriptions,
+  getSubscriptionById,
+  cancelSubscription,
+  calculateRemainingDays,
+  addCountriesToSubscription,
+  removeCountriesFromSubscription,
+  getActiveSubscriptionForCandidate,
+  getSubscriptionCountries,
+  getAvailableCountriesForSubscription,
 };

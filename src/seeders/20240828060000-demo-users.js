@@ -24,18 +24,6 @@ module.exports = {
           created_at: new Date(),
           updated_at: new Date(),
         },
-        {
-          user_id: uuidv4(),
-          email: "manager@gmail.com",
-          password: bcrypt.hashSync("12345678", saltRounds),
-          full_name: "Manager User",
-          is_active: true,
-          api_token: null,
-          created_by: adminUserId,
-          updated_by: null,
-          created_at: new Date(),
-          updated_at: new Date(),
-        },
       ],
       {}
     );

@@ -1,4 +1,5 @@
 const { lookup, isSupportedEntity } = require("../services/lookup.service");
+const baseLogger = require("../config/logger");
 
 const getLookup = async (req, res) => {
   try {
@@ -18,6 +19,8 @@ const getLookup = async (req, res) => {
       search,
       sortBy,
       sortOrder,
+      exclude_country_ids: req.query.exclude_country_ids,
+      "exclude_country_ids[]": req.query["exclude_country_ids[]"],
     });
 
     return res.status(200).json({
@@ -27,7 +30,8 @@ const getLookup = async (req, res) => {
       meta: result.meta,
     });
   } catch (error) {
-    console.error("Error in getLookup:", error);
+    const logger = req.logger || baseLogger;
+    logger.error("Error in getLookup", { message: error.message, stack: error.stack });
     return res.status(500).json({
       success: false,
       message: "Failed to fetch lookup data",

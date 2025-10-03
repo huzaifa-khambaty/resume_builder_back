@@ -10,7 +10,12 @@ const {
   downloadResumeFile,
   downloadCurrentResume,
   getJobList,
+  getEmployersForCandidate,
+  getCandidateDashboard,
+  getChartsByJobCategory,
+  parseResumeFromPdf,
 } = require("../controllers/candidate.controller");
+const { addSimulation } = require("../controllers/simulation.controller");
 
 // Configure multer for file upload (memory storage)
 const upload = multer({
@@ -36,12 +41,24 @@ router.post(
   upload.single("resume"),
   uploadResumeFile
 );
+router.post(
+  "/resume/parse",
+  checkAuth,
+  upload.single("resume"),
+  parseResumeFromPdf
+);
 router.put("/resume/edit", checkAuth, upload.single("resume"), editResumeFile);
 router.get("/resume/download", checkAuth, downloadResumeFile);
 router.get("/resume/current", checkAuth, downloadCurrentResume);
 router.get("/job-list", checkAuth, getJobList);
+router.get("/employers", checkAuth, getEmployersForCandidate);
+router.get("/dashboard", checkAuth, getCandidateDashboard);
+router.get("/charts/:job_category_id", checkAuth, getChartsByJobCategory);
 
 // Subscription routes
 router.use("/subscriptions", require("./subscription.route"));
+
+// Simulations routes
+router.post("/simulations", checkAuth, addSimulation);
 
 module.exports = router;

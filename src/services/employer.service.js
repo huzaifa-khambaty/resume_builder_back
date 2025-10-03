@@ -270,12 +270,79 @@ async function listEmployers(options = {}) {
   return { data: rows, meta };
 }
 
+// Get ALL employers for a given country and job_category (no pagination)
+// Returns a normalized payload including country and job category display names
+async function getEmployersByCountryAndCategory(country_id, job_category_id) {
+  const [country, jobCategory] = await Promise.all([
+    Country.findByPk(country_id),
+    JobCategory.findByPk(job_category_id),
+  ]);
+
+  if (!country) {
+    const err = new Error("Country not found");
+    err.status = 404;
+    throw err;
+  }
+  if (!jobCategory) {
+    const err = new Error("Job category not found");
+    err.status = 404;
+    throw err;
+  }
+
+  const employers = await Employer.findAll({
+    where: { country_id },
+    attributes: { exclude: ["password"] },
+    include: [
+      {
+        model: Job,
+        as: "jobs",
+        attributes: ["job_id", "job_title", "no_of_vacancies"],
+        where: { job_category_id },
+        required: true,
+        include: [
+          {
+            model: JobCategory,
+            as: "jobCategory",
+            attributes: ["job_category_id", "job_category"],
+          },
+        ],
+      },
+    ],
+    order: [["employer_name", "ASC"]],
+  });
+
+  const items = employers.map((e) => ({
+    employer_id: e.employer_id,
+    employer_name: e.employer_name,
+    email: e.email,
+    website: e.website,
+    sector: e.sector,
+    city: e.city,
+    notes: e.notes,
+    confidence: e.confidence,
+  }));
+
+  return {
+    country: {
+      country_id: country.country_id,
+      country_name: country.country,
+      country_code: country.country_code,
+    },
+    job_category: {
+      job_category_id: jobCategory.job_category_id,
+      job_category_name: jobCategory.job_category,
+    },
+    employers: items,
+  };
+}
+
 module.exports = {
   getCountryAndCategoryByIds,
   buildEmployerPrompt,
   callOpenAIForEmployers,
   saveEmployers,
   listEmployers,
+  getEmployersByCountryAndCategory,
 };
 
 // Save employers parsed from OpenAI response

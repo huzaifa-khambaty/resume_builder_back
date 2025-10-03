@@ -11,6 +11,9 @@ const {
   getSubscriptionById,
   cancelSubscription,
   removeCountriesFromSubscription,
+  getActiveSubscriptionForCandidate,
+  getSubscriptionCountries,
+  getAvailableCountriesForSubscription,
 } = require("../services/subscription.service");
 const braintreeService = require("../services/braintree.service");
 const logger = require("../config/logger");
@@ -698,7 +701,9 @@ async function verifyWebhook(req, res) {
     if (!challenge) {
       return res.status(400).send("Missing bt_challenge");
     }
-    const verification = await braintreeService.verifyWebhookChallenge(challenge);
+    const verification = await braintreeService.verifyWebhookChallenge(
+      challenge
+    );
     return res.status(200).send(verification);
   } catch (error) {
     logger?.error?.("verifyWebhook error", { error: error.message });
@@ -728,32 +733,65 @@ async function handleWebhook(req, res) {
     const subscription = notification?.subscription;
 
     if (subscription?.id) {
-      const { CandidateSubscription } = require("../models");
+      const { CandidateSubscription, SubscriptionPlan, Candidate } = require("../models");
       const existing = await CandidateSubscription.findOne({
         where: { braintree_subscription_id: subscription.id },
+        include: [{ model: SubscriptionPlan, as: "plan" }],
       });
 
       if (existing) {
-        let newStatus = existing.status;
+        let updates = {};
         switch (kind) {
-          case "subscription_charged_successfully":
-            newStatus = "active";
+          case "subscription_charged_successfully": {
+            // Extend cycle dates and set payment_status completed
+            const currentEnd = new Date(existing.end_date);
+            const startDate = isNaN(currentEnd) ? new Date() : currentEnd;
+            const endDate = new Date(startDate);
+            const durationDays = Number(existing.plan?.duration_days || 30);
+            endDate.setDate(endDate.getDate() + durationDays);
+
+            const perCountry = parseFloat(existing.plan?.price_per_country || 0);
+            const newCycleAmount = parseFloat((perCountry * existing.country_count).toFixed(2));
+
+            updates = {
+              status: "active",
+              payment_status: "completed",
+              start_date: startDate,
+              end_date: endDate,
+              total_amount: newCycleAmount,
+            };
+
+            await existing.update(updates);
+
+            // Also update candidate denormalized fields
+            try {
+              await Candidate.update(
+                {
+                  expiry_date: endDate,
+                  qty: existing.country_count,
+                  unit_price: perCountry,
+                },
+                { where: { candidate_id: existing.candidate_id } }
+              );
+            } catch {}
             break;
-          case "subscription_canceled":
-            newStatus = "cancelled";
+          }
+          case "subscription_canceled": {
+            updates = { status: "cancelled" };
+            await existing.update(updates);
             break;
-          case "subscription_expired":
-            newStatus = "expired";
+          }
+          case "subscription_expired": {
+            updates = { status: "expired" };
+            await existing.update(updates);
             break;
-          case "subscription_charged_unsuccessfully":
-            // keep status but mark payment failed
+          }
+          case "subscription_charged_unsuccessfully": {
             await existing.update({ payment_status: "failed" });
             break;
+          }
           default:
             break;
-        }
-        if (newStatus !== existing.status) {
-          await existing.update({ status: newStatus });
         }
       }
     }
@@ -884,4 +922,40 @@ module.exports = {
   // Countries
   addCountries,
   removeCountries,
+  // Convenience
+  async getActiveSubscriptionSummary(req, res) {
+    try {
+      const candidateId = req.candidate.candidate_id;
+      const active = await getActiveSubscriptionForCandidate(candidateId);
+      return res.status(200).json({
+        success: true,
+        message: "Active subscription fetched",
+        data: active,
+      });
+    } catch (error) {
+      logger?.error?.("getActiveSubscriptionSummary error", { error: error.message });
+      return res.status(500).json({ success: false, message: "Failed to fetch active subscription", error: error.message });
+    }
+  },
+  async getSubscriptionCountryLists(req, res) {
+    try {
+      const { subscriptionId } = req.params;
+      // Ensure requester owns the subscription
+      const sub = await getSubscriptionById(subscriptionId);
+      if (sub.candidate_id !== req.candidate.candidate_id) {
+        return res.status(403).json({ success: false, message: "Access denied" });
+      }
+      const current = await getSubscriptionCountries(subscriptionId);
+      const available = await getAvailableCountriesForSubscription(subscriptionId);
+      return res.status(200).json({
+        success: true,
+        message: "Subscription country lists fetched",
+        data: { current, available },
+      });
+    } catch (error) {
+      logger?.error?.("getSubscriptionCountryLists error", { error: error.message });
+      const status = error.status || 500;
+      return res.status(status).json({ success: false, message: error.message || "Failed to fetch country lists" });
+    }
+  },
 };

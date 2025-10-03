@@ -7,19 +7,60 @@ if (
   !process.env.BRAINTREE_PUBLIC_KEY ||
   !process.env.BRAINTREE_PRIVATE_KEY
 ) {
-  console.warn(
-    "⚠️  Braintree credentials are missing. Please add them to your .env file:"
+  logger.warn(
+    "Braintree credentials are missing. Please add them to your .env file",
+    {
+      hint_env_vars: [
+        "BRAINTREE_ENVIRONMENT=Sandbox",
+        "BRAINTREE_MERCHANT_ID=your_merchant_id",
+        "BRAINTREE_PUBLIC_KEY=your_public_key",
+        "BRAINTREE_PRIVATE_KEY=your_private_key",
+      ],
+      note:
+        "Subscription system will not work without these credentials. See https://developer.paypal.com/braintree/docs/start/hello-sandbox",
+    }
   );
-  console.warn("   BRAINTREE_ENVIRONMENT=Sandbox");
-  console.warn("   BRAINTREE_MERCHANT_ID=your_merchant_id");
-  console.warn("   BRAINTREE_PUBLIC_KEY=your_public_key");
-  console.warn("   BRAINTREE_PRIVATE_KEY=your_private_key");
-  console.warn(
-    "\n   Subscription system will not work without these credentials."
-  );
-  console.warn(
-    "   You can get sandbox credentials from: https://developer.paypal.com/braintree/docs/start/hello-sandbox\n"
-  );
+}
+
+/**
+ * Update Braintree subscription (e.g., change price or payment method)
+ * @param {string} subscriptionId
+ * @param {Object} updateData - Supported fields: price, paymentMethodToken
+ * @returns {Promise<Object>} Update result
+ */
+async function updateSubscription(subscriptionId, updateData) {
+  try {
+    if (!gateway) {
+      throw new Error(
+        "Braintree gateway not configured. Please check your environment variables."
+      );
+    }
+
+    const payload = {};
+    if (updateData.price !== undefined) payload.price = updateData.price;
+    if (updateData.paymentMethodToken !== undefined)
+      payload.paymentMethodToken = updateData.paymentMethodToken;
+
+    const response = await gateway.subscription.update(subscriptionId, payload);
+
+    if (response.success) {
+      return {
+        success: true,
+        subscription: response.subscription,
+      };
+    } else {
+      return {
+        success: false,
+        message: response.message,
+        errors: response.errors,
+      };
+    }
+  } catch (error) {
+    logger?.error?.("Braintree updateSubscription error", {
+      error: error.message,
+    });
+    throw error;
+  }
 }
 
 // Braintree configuration
@@ -152,6 +193,16 @@ async function processTransaction(transactionData) {
       transactionOptions.customerId = transactionData.customerId;
     }
 
+    // Provide a unique orderId to avoid Braintree duplicate transaction rejection
+    if (transactionData.orderId) {
+      transactionOptions.orderId = String(transactionData.orderId);
+    } else {
+      // Fallback: generate a simple unique order id per attempt
+      transactionOptions.orderId = `ord_${Date.now()}_${Math.random()
+        .toString(36)
+        .slice(2, 10)}`;
+    }
+
     const response = await gateway.transaction.sale(transactionOptions);
 
     if (response.success) {
@@ -185,11 +236,21 @@ async function processTransaction(transactionData) {
  */
 async function createSubscription(subscriptionData) {
   try {
-    const response = await gateway.subscription.create({
+    const payload = {
       paymentMethodToken: subscriptionData.paymentMethodToken,
       planId: subscriptionData.planId,
       price: subscriptionData.price,
-    });
+    };
+
+    if (subscriptionData.firstBillingDate) {
+      payload.firstBillingDate = new Date(subscriptionData.firstBillingDate);
+    }
+
+    if (subscriptionData.numberOfBillingCycles) {
+      payload.numberOfBillingCycles = subscriptionData.numberOfBillingCycles;
+    }
+
+    const response = await gateway.subscription.create(payload);
 
     if (response.success) {
       return {
@@ -373,7 +434,7 @@ async function createPlan(planData) {
       id: planData.id,
       name: planData.name,
       price: planData.price,
-      billingFrequency: 1,
+      billingFrequency: planData.billingFrequency || 1,
       currencyIsoCode: "USD",
     });
 
@@ -468,6 +529,7 @@ module.exports = {
   createSubscription,
   cancelSubscription,
   findSubscription,
+  updateSubscription,
   createPaymentMethod,
   createPlan,
   updatePlan,

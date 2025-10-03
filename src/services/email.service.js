@@ -1,6 +1,7 @@
 require("dotenv").config(); // load environment variables
 const nodemailer = require("nodemailer");
 const { renderTemplate } = require("../emails/templateRenderer");
+const { EmailUnsubscribe } = require("../models");
 
 const smtpHost = process.env.SMTP_HOST;
 const smtpPort = Number(process.env.SMTP_PORT || 587);
@@ -40,6 +41,17 @@ function createTransporter() {
 }
 
 async function sendMail({ to, subject, html, text }) {
+  // Suppression check: do not send to unsubscribed addresses
+  if (to) {
+    const email = to.toString().trim().toLowerCase();
+    const suppressed = await EmailUnsubscribe.findOne({
+      where: { email, is_active: true },
+    });
+    if (suppressed) {
+      // Silently skip sending
+      return { skipped: true, reason: "unsubscribed", to: email };
+    }
+  }
   const transporter = createTransporter();
   return transporter.sendMail({
     from: fromEmail,
