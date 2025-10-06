@@ -119,7 +119,8 @@ async function createSubscriptionPlan(planData, adminId) {
         // Map duration_days (days) to Braintree billingFrequency (months)
         const days = Number(planData.duration_days) || 30;
         const frequencyMap = { 30: 1, 60: 2, 90: 3, 180: 6, 365: 12 };
-        const billingFrequency = frequencyMap[days] || Math.max(1, Math.round(days / 30));
+        const billingFrequency =
+          frequencyMap[days] || Math.max(1, Math.round(days / 30));
 
         const braintreePlanResult = await braintreeService.createPlan({
           id: plan.plan_id, // Use our plan UUID as Braintree plan ID
@@ -331,29 +332,81 @@ async function calculateSubscriptionPricing(planId, countryIds, candidateId) {
     let effectiveDurationDays;
 
     if (remainingDays > 0) {
-      // If there's an active subscription, new subscription duration is limited to remaining days
-      effectiveDurationDays = Math.min(remainingDays, plan.duration_days);
-      startDate = new Date();
-      endDate = new Date();
-      endDate.setDate(endDate.getDate() + effectiveDurationDays);
+      // If there's an active subscription, anchor to its actual end_date to avoid rounding drift
+      const activeSubscription = await CandidateSubscription.findOne({
+        where: {
+          candidate_id: candidateId,
+          status: "active",
+          end_date: { [Op.gt]: new Date() },
+        },
+        order: [["end_date", "DESC"]],
+      });
 
-      // Calculate prorated amount based on effective duration
-      const prorationFactor = effectiveDurationDays / plan.duration_days;
-      const proratedAmount = totalAmount * prorationFactor;
+      const now = new Date();
+      const activeEnd = activeSubscription
+        ? new Date(activeSubscription.end_date)
+        : null;
 
-      return {
-        plan,
-        countries,
-        countryCount,
-        originalAmount: totalAmount,
-        finalAmount: parseFloat(proratedAmount.toFixed(2)),
-        effectiveDurationDays,
-        originalDurationDays: plan.duration_days,
-        remainingDays,
-        isProrated: true,
-        startDate,
-        endDate,
-      };
+      if (
+        activeSubscription &&
+        activeEnd instanceof Date &&
+        !isNaN(activeEnd)
+      ) {
+        const msDiff = activeEnd.getTime() - now.getTime();
+        const preciseRemainingDays = Math.max(
+          0,
+          Math.ceil(msDiff / (1000 * 60 * 60 * 24))
+        );
+
+        // New charge is prorated for the shorter of remaining days and plan duration
+        effectiveDurationDays = Math.min(
+          preciseRemainingDays,
+          plan.duration_days
+        );
+        startDate = now;
+        // Critically: set endDate to the ACTIVE subscription's actual end_date
+        endDate = activeEnd;
+
+        const prorationFactor = effectiveDurationDays / plan.duration_days;
+        const proratedAmount = totalAmount * prorationFactor;
+
+        return {
+          plan,
+          countries,
+          countryCount,
+          originalAmount: totalAmount,
+          finalAmount: parseFloat(proratedAmount.toFixed(2)),
+          effectiveDurationDays,
+          originalDurationDays: plan.duration_days,
+          remainingDays: preciseRemainingDays,
+          isProrated: true,
+          startDate,
+          endDate,
+        };
+      } else {
+        // Fallback to previous behavior if for some reason the active sub couldn't be fetched
+        effectiveDurationDays = Math.min(remainingDays, plan.duration_days);
+        startDate = new Date();
+        endDate = new Date();
+        endDate.setDate(endDate.getDate() + effectiveDurationDays);
+
+        const prorationFactor = effectiveDurationDays / plan.duration_days;
+        const proratedAmount = totalAmount * prorationFactor;
+
+        return {
+          plan,
+          countries,
+          countryCount,
+          originalAmount: totalAmount,
+          finalAmount: parseFloat(proratedAmount.toFixed(2)),
+          effectiveDurationDays,
+          originalDurationDays: plan.duration_days,
+          remainingDays,
+          isProrated: true,
+          startDate,
+          endDate,
+        };
+      }
     } else {
       // No active subscription, use full plan duration
       effectiveDurationDays = plan.duration_days;
@@ -497,18 +550,24 @@ async function createCandidateSubscription(subscriptionData) {
             braintree_subscription_id: btSub.subscription.id,
           });
         } else {
-          logger?.warn?.("Failed to create Braintree subscription for auto-renewal", {
-            candidateId,
-            planId,
-            errors: btSub?.errors,
-            message: btSub?.message,
-          });
+          logger?.warn?.(
+            "Failed to create Braintree subscription for auto-renewal",
+            {
+              candidateId,
+              planId,
+              errors: btSub?.errors,
+              message: btSub?.message,
+            }
+          );
         }
       } else {
-        logger?.warn?.("No vaulted payment method token returned by transaction; skipping auto-renewal setup", {
-          candidateId,
-          transactionId: transactionResult?.transaction?.id,
-        });
+        logger?.warn?.(
+          "No vaulted payment method token returned by transaction; skipping auto-renewal setup",
+          {
+            candidateId,
+            transactionId: transactionResult?.transaction?.id,
+          }
+        );
       }
     } catch (pmErr) {
       logger?.warn?.("Auto-renewal setup failed", { error: pmErr.message });
@@ -1050,7 +1109,9 @@ async function addCountriesToSubscription({
         }
       }
     } catch (err) {
-      logger?.warn?.("Auto-renewal price update failed", { error: err.message });
+      logger?.warn?.("Auto-renewal price update failed", {
+        error: err.message,
+      });
     }
 
     // Reload with associations
@@ -1234,15 +1295,20 @@ async function removeCountriesFromSubscription({
           { price: perCyclePrice }
         );
         if (!upd?.success) {
-          logger?.warn?.("Failed to update Braintree subscription price after removal", {
-            subscriptionId,
-            braintreeSubscriptionId: subscription.braintree_subscription_id,
-            message: upd?.message,
-          });
+          logger?.warn?.(
+            "Failed to update Braintree subscription price after removal",
+            {
+              subscriptionId,
+              braintreeSubscriptionId: subscription.braintree_subscription_id,
+              message: upd?.message,
+            }
+          );
         }
       }
     } catch (err) {
-      logger?.warn?.("Auto-renewal price update (remove) failed", { error: err.message });
+      logger?.warn?.("Auto-renewal price update (remove) failed", {
+        error: err.message,
+      });
     }
 
     // Update candidate summary (denormalized columns)
