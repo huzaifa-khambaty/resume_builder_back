@@ -1,6 +1,7 @@
 const passport = require("passport");
 const GoogleStrategy = require("passport-google-oauth20").Strategy;
 const FacebookStrategy = require("passport-facebook").Strategy;
+const LinkedInStrategy = require("passport-linkedin-oauth2").Strategy;
 
 // Replace with your DB call
 const makeProfileObject = (profile) => {
@@ -39,6 +40,22 @@ passport.use(
       clientSecret: process.env.FACEBOOK_CLIENT_SECRET,
       callbackURL: "/api/auth/facebook/callback",
       profileFields: ["id", "displayName", "emails", "photos"],
+    },
+    (accessToken, refreshToken, profile, done) => {
+      const user = makeProfileObject(profile);
+      done(null, user);
+    }
+  )
+);
+
+// LinkedIn
+passport.use(
+  new LinkedInStrategy(
+    {
+      clientID: process.env.LINKEDIN_CLIENT_ID,
+      clientSecret: process.env.LINKEDIN_CLIENT_SECRET,
+      callbackURL: "/api/auth/linkedin/callback",
+      scope: ["r_liteprofile", "r_emailaddress"],
     },
     (accessToken, refreshToken, profile, done) => {
       const user = makeProfileObject(profile);

@@ -4,6 +4,7 @@ const {
   register,
   googleLogin,
   facebookLogin,
+  linkedinLogin,
   verifyEmail,
   me,
   logout,
@@ -62,6 +63,24 @@ router.get(
     failureRedirect: "/login",
   }),
   facebookLogin
+);
+
+// LinkedIn
+router.get(
+  "/linkedin",
+  passport.authenticate("linkedin", {
+    session: false,
+    scope: ["r_liteprofile", "r_emailaddress"],
+  })
+);
+
+router.get(
+  "/linkedin/callback",
+  passport.authenticate("linkedin", {
+    session: false,
+    failureRedirect: "/login",
+  }),
+  linkedinLogin
 );
 
 module.exports = router;

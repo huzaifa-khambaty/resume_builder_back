@@ -279,6 +279,8 @@ const googleLogin = (req, res) => oauthHandler(req, res);
 
 const facebookLogin = (req, res) => oauthHandler(req, res);
 
+const linkedinLogin = (req, res) => oauthHandler(req, res);
+
 // GET /api/auth/me
 // Returns current candidate based on Bearer token
 async function me(req, res) {
@@ -425,6 +427,7 @@ module.exports = {
   register,
   googleLogin,
   facebookLogin,
+  linkedinLogin,
   verifyEmail,
   me,
   logout,
