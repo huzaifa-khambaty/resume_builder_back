@@ -18,6 +18,7 @@ const {
 const {
   start: startSubscribedCountryUpdatesCampaign,
 } = require("./jobs/subscribedCountryUpdatesCampaign");
+const { start: startEmployerScrapeCron } = require("./jobs/employerScrapeCron");
 
 const app = express();
 
@@ -74,6 +75,7 @@ async function bootstrap() {
       startSimulationShortlistCron();
       startWeeklyCountryCampaign();
       startSubscribedCountryUpdatesCampaign();
+      startEmployerScrapeCron();
     });
   } catch (error) {
     logger.error("Unable to connect to the database", { error: error.message, stack: error.stack });
