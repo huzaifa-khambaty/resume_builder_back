@@ -21,7 +21,7 @@ router.get("/plans", checkAuth, getActivePlans);
 // Calculate subscription pricing
 router.post("/calculate", checkAuth, calculatePricing);
 
-// Get Braintree client token
+// Get payment publishable key (Stripe)
 router.get("/client-token", checkAuth, getClientToken);
 
 // Create subscription

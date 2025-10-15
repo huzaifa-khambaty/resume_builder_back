@@ -40,6 +40,11 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: true,
         allowNull: false,
       },
+      stripe_price_id: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        comment: 'Stripe Price ID for this subscription plan',
+      },
       created_by: {
         type: DataTypes.UUID,
         allowNull: false,

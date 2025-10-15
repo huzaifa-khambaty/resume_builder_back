@@ -8,7 +8,7 @@ const {
   Country,
 } = require("../models");
 const PaginationService = require("./pagination.service");
-const braintreeService = require("./braintree.service");
+const stripeService = require("./stripe.service");
 const logger = require("../config/logger");
 
 /**
@@ -102,7 +102,27 @@ async function createSubscriptionPlan(planData, adminId) {
       );
     }
 
-    // Create plan in our database first
+    // Create Stripe Price for this plan
+    let stripePriceId = null;
+    try {
+      const stripePrice = await stripeService.createPriceForPlan({
+        unitAmountCents: Math.round(
+          parseFloat(planData.price_per_country) * 100
+        ),
+        currency: "usd",
+        planName: planData.name,
+        durationDays: planData.duration_days,
+      });
+      stripePriceId = stripePrice.id;
+    } catch (stripeError) {
+      logger?.warn?.("Failed to create Stripe price for plan", {
+        error: stripeError.message,
+        planName: planData.name,
+      });
+      // Continue without Stripe price - can be created later
+    }
+
+    // Create plan in our database
     const plan = await SubscriptionPlan.create({
       plan_id: uuidv4(),
       name: planData.name,
@@ -110,53 +130,9 @@ async function createSubscriptionPlan(planData, adminId) {
       duration_days: planData.duration_days,
       price_per_country: planData.price_per_country,
       is_active: isActive,
+      stripe_price_id: stripePriceId,
       created_by: adminId,
     });
-
-    // If Braintree is configured, create plan there too
-    if (process.env.BRAINTREE_MERCHANT_ID) {
-      try {
-        // Map duration_days (days) to Braintree billingFrequency (months)
-        const days = Number(planData.duration_days) || 30;
-        const frequencyMap = { 30: 1, 60: 2, 90: 3, 180: 6, 365: 12 };
-        const billingFrequency =
-          frequencyMap[days] || Math.max(1, Math.round(days / 30));
-
-        const braintreePlanResult = await braintreeService.createPlan({
-          id: plan.plan_id, // Use our plan UUID as Braintree plan ID
-          name: planData.name,
-          price: planData.price_per_country.toString(), // Convert to string for Braintree
-          billingFrequency,
-        });
-
-        if (!braintreePlanResult.success) {
-          logger?.warn?.("Failed to create plan in Braintree", {
-            planId: plan.plan_id,
-            error: braintreePlanResult.message,
-            errors: braintreePlanResult.errors,
-          });
-          // Continue anyway - plan is created in our database
-        } else {
-          logger?.info?.("Plan created successfully in Braintree", {
-            planId: plan.plan_id,
-            braintreePlanId: braintreePlanResult.plan.id,
-          });
-        }
-      } catch (braintreeError) {
-        logger?.warn?.("Braintree plan creation failed", {
-          planId: plan.plan_id,
-          error: braintreeError.message,
-        });
-        // Continue anyway - plan is created in our database
-      }
-    } else {
-      logger?.info?.(
-        "Braintree not configured, plan created without Braintree plan",
-        {
-          planId: plan.plan_id,
-        }
-      );
-    }
 
     return plan;
   } catch (error) {
@@ -206,47 +182,7 @@ async function updateSubscriptionPlan(planId, updateData, adminId) {
       updated_by: adminId,
     });
 
-    // If Braintree is configured and plan exists there, update it too
-    if (process.env.BRAINTREE_MERCHANT_ID) {
-      try {
-        const braintreePlanResult = await braintreeService.findPlan(planId);
-
-        if (braintreePlanResult.success) {
-          // Plan exists in Braintree, update it
-          const updateFields = {};
-          if (updateData.name !== undefined)
-            updateFields.name = updateData.name;
-          if (updateData.price_per_country !== undefined) {
-            updateFields.price = updateData.price_per_country.toString();
-          }
-
-          if (Object.keys(updateFields).length > 0) {
-            const updateResult = await braintreeService.updatePlan(
-              planId,
-              updateFields
-            );
-
-            if (!updateResult.success) {
-              logger?.warn?.("Failed to update plan in Braintree", {
-                planId: plan.plan_id,
-                error: updateResult.message,
-                errors: updateResult.errors,
-              });
-            } else {
-              logger?.info?.("Plan updated successfully in Braintree", {
-                planId: plan.plan_id,
-                braintreePlanId: updateResult.plan.id,
-              });
-            }
-          }
-        }
-      } catch (braintreeError) {
-        logger?.warn?.("Braintree plan update check failed", {
-          planId: plan.plan_id,
-          error: braintreeError.message,
-        });
-      }
-    }
+    // External plan sync removed (Braintree deprecated)
 
     return plan;
   } catch (error) {
@@ -442,7 +378,7 @@ async function calculateSubscriptionPricing(planId, countryIds, candidateId) {
  * @param {string} subscriptionData.candidateId - Candidate ID
  * @param {string} subscriptionData.planId - Plan ID
  * @param {Array} subscriptionData.countryIds - Country IDs
- * @param {string} subscriptionData.paymentMethodNonce - Braintree payment nonce
+ * @param {string} subscriptionData.paymentMethodNonce - Payment method identifier
  * @returns {Promise<Object>} Created subscription
  */
 async function createCandidateSubscription(subscriptionData) {
@@ -465,55 +401,74 @@ async function createCandidateSubscription(subscriptionData) {
       throw error;
     }
 
-    // Create Braintree customer if not exists
-    let braintreeCustomerId = candidateId;
-    const customerResult = await braintreeService.findCustomer(
-      braintreeCustomerId
-    );
-
-    if (customerResult.notFound) {
-      const nameparts = candidate.full_name.split(" ");
-      const firstName = nameparts[0] || "";
-      const lastName = nameparts.slice(1).join(" ") || "";
-
-      const createCustomerResult = await braintreeService.createCustomer({
-        id: braintreeCustomerId,
-        firstName,
-        lastName,
-        email: candidate.email,
-      });
-
-      if (!createCustomerResult.success) {
-        const error = new Error(
-          `Failed to create Braintree customer: ${createCustomerResult.message}`
-        );
-        error.status = 400;
-        throw error;
-      }
-    }
-
-    // Process payment for the current period and vault the payment method for auto-renewal
-    const transactionResult = await braintreeService.processTransaction({
-      amount: pricingResult.finalAmount.toString(),
-      paymentMethodNonce,
-      customerId: braintreeCustomerId,
-      orderId: `sub_create_${candidateId}_${Date.now()}`,
-      options: { submitForSettlement: true, storeInVaultOnSuccess: true },
+    // Stripe: ensure customer, attach payment method, charge prorated amount
+    const stripeCustomer = await stripeService.getOrCreateCustomer({
+      candidateId,
+      email: candidate.email,
+      name: candidate.full_name,
     });
 
-    if (!transactionResult.success) {
-      const error = new Error(`Payment failed: ${transactionResult.message}`);
+    if (!paymentMethodNonce) {
+      const error = new Error("Payment method is required");
       error.status = 400;
-      error.details = transactionResult.errors;
       throw error;
     }
+
+    await stripeService.attachPaymentMethod({
+      customerId: stripeCustomer.id,
+      paymentMethodId: paymentMethodNonce,
+    });
+
+    const amountCents = Math.round(parseFloat(pricingResult.finalAmount) * 100);
+    const paymentIntent = await stripeService.createAndConfirmPaymentIntent({
+      amountCents,
+      currency: "usd",
+      customerId: stripeCustomer.id,
+      paymentMethodId: paymentMethodNonce,
+      description: `Subscription initial charge for candidate ${candidateId}`,
+      metadata: { candidate_id: candidateId, plan_id: planId },
+    });
+
+    // Use existing Stripe Price ID from plan, or create one if missing
+    let priceId = pricingResult?.plan?.stripe_price_id;
+
+    if (!priceId) {
+      // Fallback: create price if not exists (for old plans)
+      const perCycleCents = Math.round(
+        parseFloat(pricingResult?.plan?.price_per_country || 0) * 100
+      );
+      const price = await stripeService.createPriceForPlan({
+        unitAmountCents: perCycleCents,
+        currency: "usd",
+        planName: pricingResult?.plan?.name,
+        durationDays: pricingResult?.plan?.duration_days,
+      });
+      priceId = price.id;
+
+      // Update plan with the new Stripe Price ID
+      await SubscriptionPlan.update(
+        { stripe_price_id: priceId },
+        { where: { plan_id: planId } }
+      );
+    }
+
+    const stripeSub = await stripeService.createSubscriptionAnchored({
+      customerId: stripeCustomer.id,
+      priceId: priceId,
+      anchorDate: pricingResult.endDate,
+      prorationBehavior: "none",
+      metadata: { candidate_id: candidateId, plan_id: planId },
+    });
 
     // Create subscription record
     const subscription = await CandidateSubscription.create({
       subscription_id: uuidv4(),
       candidate_id: candidateId,
       plan_id: planId,
-      braintree_transaction_id: transactionResult.transaction.id,
+      stripe_customer_id: stripeCustomer.id,
+      stripe_payment_intent_id: paymentIntent.id,
+      stripe_subscription_id: stripeSub.id,
+      stripe_price_id: priceId,
       country_count: pricingResult.countryCount,
       total_amount: pricingResult.finalAmount,
       start_date: pricingResult.startDate,
@@ -522,57 +477,6 @@ async function createCandidateSubscription(subscriptionData) {
       payment_status: "completed",
       created_by: candidateId,
     });
-
-    // Use vaulted payment method token from the successful transaction to create Braintree subscription for auto-renewal
-    try {
-      const vaultedToken =
-        transactionResult?.transaction?.creditCard?.token ||
-        transactionResult?.transaction?.paypalAccount?.token ||
-        null;
-
-      if (vaultedToken) {
-        // Per-cycle price is based on selected countries at full duration
-        const perCyclePrice = (
-          parseFloat(pricingResult?.plan?.price_per_country || 0) *
-          pricingResult.countryCount
-        ).toFixed(2);
-
-        const btSub = await braintreeService.createSubscription({
-          paymentMethodToken: vaultedToken,
-          planId: planId,
-          price: perCyclePrice,
-          // Start next cycle when current one ends
-          firstBillingDate: pricingResult.endDate,
-        });
-
-        if (btSub?.success && btSub.subscription?.id) {
-          await subscription.update({
-            braintree_subscription_id: btSub.subscription.id,
-          });
-        } else {
-          logger?.warn?.(
-            "Failed to create Braintree subscription for auto-renewal",
-            {
-              candidateId,
-              planId,
-              errors: btSub?.errors,
-              message: btSub?.message,
-            }
-          );
-        }
-      } else {
-        logger?.warn?.(
-          "No vaulted payment method token returned by transaction; skipping auto-renewal setup",
-          {
-            candidateId,
-            transactionId: transactionResult?.transaction?.id,
-          }
-        );
-      }
-    } catch (pmErr) {
-      logger?.warn?.("Auto-renewal setup failed", { error: pmErr.message });
-      // Do not block subscription creation if renewal setup fails
-    }
 
     // Create subscription countries
     const subscriptionCountries = countryIds.map((countryId) => ({
@@ -587,7 +491,7 @@ async function createCandidateSubscription(subscriptionData) {
     try {
       await Candidate.update(
         {
-          payment_gateway: "braintree",
+          payment_gateway: "stripe",
           subscription_id: subscription.subscription_id,
           qty: pricingResult.countryCount,
           unit_price: pricingResult?.plan?.price_per_country ?? null,
@@ -637,7 +541,7 @@ async function createCandidateSubscription(subscriptionData) {
 
     return {
       subscription: completeSubscription,
-      transaction: transactionResult.transaction,
+      transaction: paymentIntent,
       pricingDetails: pricingResult,
     };
   } catch (error) {
@@ -778,16 +682,17 @@ async function cancelSubscription(subscriptionId, userId) {
       throw error;
     }
 
-    // Cancel in Braintree if subscription ID exists
-    if (subscription.braintree_subscription_id) {
-      const braintreeResult = await braintreeService.cancelSubscription(
-        subscription.braintree_subscription_id
-      );
-      if (!braintreeResult.success) {
-        logger?.warn?.("Failed to cancel Braintree subscription", {
+    // Cancel in Stripe if subscription ID exists
+    if (subscription.stripe_subscription_id) {
+      try {
+        await stripeService.cancelSubscription(
+          subscription.stripe_subscription_id
+        );
+      } catch (e) {
+        logger?.warn?.("Failed to cancel Stripe subscription", {
           subscriptionId,
-          braintreeSubscriptionId: subscription.braintree_subscription_id,
-          error: braintreeResult.message,
+          stripeSubscriptionId: subscription.stripe_subscription_id,
+          error: e.message,
         });
       }
     }
@@ -992,7 +897,7 @@ async function addCountriesToSubscription({
       (originalAmount * prorationFactor).toFixed(2)
     );
 
-    // Get candidate and ensure Braintree customer
+    // Get candidate and ensure Stripe customer
     const candidate = await Candidate.findByPk(candidateId);
     if (!candidate) {
       const error = new Error("Candidate not found");
@@ -1000,49 +905,37 @@ async function addCountriesToSubscription({
       throw error;
     }
 
-    let braintreeCustomerId = candidateId;
-    const customerResult = await braintreeService.findCustomer(
-      braintreeCustomerId
-    );
-
-    if (customerResult.notFound) {
-      const nameparts = (candidate.full_name || "").split(" ");
-      const firstName = nameparts[0] || "";
-      const lastName = nameparts.slice(1).join(" ") || "";
-
-      const createCustomerResult = await braintreeService.createCustomer({
-        id: braintreeCustomerId,
-        firstName,
-        lastName,
-        email: candidate.email,
-      });
-
-      if (!createCustomerResult.success) {
+    // Stripe: attach payment method (if provided) and charge prorated amount
+    let paymentIntent = null;
+    const stripeCustomer = await stripeService.getOrCreateCustomer({
+      candidateId,
+      email: candidate.email,
+      name: candidate.full_name,
+    });
+    if (finalAmount > 0) {
+      if (!paymentMethodNonce) {
         const error = new Error(
-          `Failed to create Braintree customer: ${createCustomerResult.message}`
+          "Payment method is required for additional charge"
         );
         error.status = 400;
         throw error;
       }
-    }
-
-    // Process payment if amount > 0
-    let transactionResult = { success: true, transaction: null };
-    if (finalAmount > 0) {
-      transactionResult = await braintreeService.processTransaction({
-        amount: finalAmount.toString(),
-        paymentMethodNonce,
-        customerId: braintreeCustomerId,
-        orderId: `sub_add_${subscription.subscription_id}_${Date.now()}`,
-        options: { submitForSettlement: true },
+      await stripeService.attachPaymentMethod({
+        customerId: stripeCustomer.id,
+        paymentMethodId: paymentMethodNonce,
       });
-
-      if (!transactionResult.success) {
-        const error = new Error(`Payment failed: ${transactionResult.message}`);
-        error.status = 400;
-        error.details = transactionResult.errors;
-        throw error;
-      }
+      const amountCents = Math.round(finalAmount * 100);
+      paymentIntent = await stripeService.createAndConfirmPaymentIntent({
+        amountCents,
+        currency: "usd",
+        customerId: stripeCustomer.id,
+        paymentMethodId: paymentMethodNonce,
+        description: `Prorated charge for adding countries to ${subscription.subscription_id}`,
+        metadata: {
+          candidate_id: candidateId,
+          subscription_id: subscription.subscription_id,
+        },
+      });
     }
 
     // Create subscription countries
@@ -1063,53 +956,33 @@ async function addCountriesToSubscription({
     await subscription.update({
       country_count: updatedCountryCount,
       total_amount: updatedTotalAmount,
-      braintree_transaction_id:
-        transactionResult.transaction?.id ||
-        subscription.braintree_transaction_id,
+      stripe_payment_intent_id:
+        paymentIntent?.id || subscription.stripe_payment_intent_id,
       updated_by: candidateId,
     });
 
-    // Ensure Braintree subscription reflects new per-cycle price
+    // Ensure Stripe subscription reflects new per-cycle price for next cycle
     try {
-      const perCyclePrice = (
-        parseFloat(plan.price_per_country) * updatedCountryCount
-      ).toFixed(2);
+      const perCycleCents = Math.round(
+        parseFloat(plan.price_per_country) * updatedCountryCount * 100
+      );
 
-      if (subscription.braintree_subscription_id) {
-        const upd = await braintreeService.updateSubscription(
-          subscription.braintree_subscription_id,
-          { price: perCyclePrice }
-        );
-        if (!upd?.success) {
-          logger?.warn?.("Failed to update Braintree subscription price", {
-            subscriptionId: subscription.subscription_id,
-            braintreeSubscriptionId: subscription.braintree_subscription_id,
-            message: upd?.message,
-            errors: upd?.errors,
-          });
-        }
-      } else if (paymentMethodNonce) {
-        // Legacy subs without a BT subscription: create one now to enable auto-renewal
-        const pm = await braintreeService.createPaymentMethod({
-          customerId: braintreeCustomerId,
-          paymentMethodNonce,
+      if (subscription.stripe_subscription_id) {
+        const price = await stripeService.createPriceForPlan({
+          unitAmountCents: perCycleCents,
+          currency: "usd",
+          planName: plan.name,
+          durationDays: plan.duration_days,
         });
-        if (pm?.success && pm.paymentMethod?.token) {
-          const btSub = await braintreeService.createSubscription({
-            paymentMethodToken: pm.paymentMethod.token,
-            planId: subscription.plan_id,
-            price: perCyclePrice,
-            firstBillingDate: subscription.end_date,
-          });
-          if (btSub?.success && btSub.subscription?.id) {
-            await subscription.update({
-              braintree_subscription_id: btSub.subscription.id,
-            });
-          }
-        }
+        await stripeService.updateSubscriptionPrice({
+          subscriptionId: subscription.stripe_subscription_id,
+          newPriceId: price.id,
+          prorationBehavior: "none",
+        });
+        await subscription.update({ stripe_price_id: price.id });
       }
     } catch (err) {
-      logger?.warn?.("Auto-renewal price update failed", {
+      logger?.warn?.("Auto-renewal price update failed (Stripe)", {
         error: err.message,
       });
     }
@@ -1147,7 +1020,7 @@ async function addCountriesToSubscription({
 
     return {
       subscription: completeSubscription,
-      transaction: transactionResult.transaction,
+      transaction: paymentIntent,
       pricingDetails: {
         plan,
         countries,
@@ -1284,29 +1157,32 @@ async function removeCountriesFromSubscription({
       { where: { subscription_id: subscriptionId } }
     );
 
-    // Update recurring price in Braintree if subscription exists
+    // Update recurring price in Stripe if subscription exists
     try {
-      if (subscription.braintree_subscription_id) {
-        const perCyclePrice = (
-          parseFloat(subscription.plan.price_per_country) * newCountryCount
-        ).toFixed(2);
-        const upd = await braintreeService.updateSubscription(
-          subscription.braintree_subscription_id,
-          { price: perCyclePrice }
+      if (subscription.stripe_subscription_id) {
+        const perCycleCents = Math.round(
+          parseFloat(subscription.plan.price_per_country) *
+            newCountryCount *
+            100
         );
-        if (!upd?.success) {
-          logger?.warn?.(
-            "Failed to update Braintree subscription price after removal",
-            {
-              subscriptionId,
-              braintreeSubscriptionId: subscription.braintree_subscription_id,
-              message: upd?.message,
-            }
-          );
-        }
+        const price = await stripeService.createPriceForPlan({
+          unitAmountCents: perCycleCents,
+          currency: "usd",
+          planName: subscription.plan.name,
+          durationDays: subscription.plan.duration_days,
+        });
+        await stripeService.updateSubscriptionPrice({
+          subscriptionId: subscription.stripe_subscription_id,
+          newPriceId: price.id,
+          prorationBehavior: "none",
+        });
+        await CandidateSubscription.update(
+          { stripe_price_id: price.id },
+          { where: { subscription_id: subscriptionId } }
+        );
       }
     } catch (err) {
-      logger?.warn?.("Auto-renewal price update (remove) failed", {
+      logger?.warn?.("Auto-renewal price update (remove, Stripe) failed", {
         error: err.message,
       });
     }

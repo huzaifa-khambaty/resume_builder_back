@@ -27,11 +27,23 @@ module.exports = (sequelize, DataTypes) => {
         onDelete: "RESTRICT",
         onUpdate: "CASCADE",
       },
-      braintree_subscription_id: {
+      stripe_customer_id: {
         type: DataTypes.STRING,
         allowNull: true,
       },
-      braintree_transaction_id: {
+      stripe_subscription_id: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      stripe_payment_intent_id: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      stripe_price_id: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      stripe_latest_invoice_id: {
         type: DataTypes.STRING,
         allowNull: true,
       },
@@ -106,7 +118,10 @@ module.exports = (sequelize, DataTypes) => {
           fields: ["start_date", "end_date"],
         },
         {
-          fields: ["braintree_subscription_id"],
+          fields: ["stripe_subscription_id"],
+        },
+        {
+          fields: ["stripe_payment_intent_id"],
         },
       ],
     }

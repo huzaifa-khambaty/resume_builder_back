@@ -6,6 +6,7 @@ const logger = require("./config/logger");
 const requestContext = require("./middlewares/requestContext.middleware");
 const sequelize = require("./config/sequelize"); // sequelize instance
 const router = require("./routes");
+const { handleStripeWebhook } = require("./controllers/subscription.controller");
 const errorHandler = require("./middlewares/errorHandler.middleware");
 const passport = require("passport");
 require("./config/passport");
@@ -24,6 +25,14 @@ const app = express();
 
 // Middlewares
 app.use(cors()); // enable cors
+
+// Stripe webhook must receive the raw body for signature verification
+app.post(
+  "/api/stripe/webhook",
+  express.raw({ type: "application/json" }),
+  handleStripeWebhook
+);
+
 app.use(express.json()); // parse JSON request body
 app.use(passport.initialize()); // initialize passport
 app.use(requestContext); // attach requestId and per-request logger

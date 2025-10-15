@@ -15,7 +15,7 @@ const {
   getSubscriptionCountries,
   getAvailableCountriesForSubscription,
 } = require("../services/subscription.service");
-const braintreeService = require("../services/braintree.service");
+const stripeService = require("../services/stripe.service");
 const logger = require("../config/logger");
 const { getValidationErrorMessage } = require("../utils/errorHelper");
 const {
@@ -278,82 +278,30 @@ async function calculatePricing(req, res) {
 }
 
 /**
- * Generate Braintree client token (Candidate)
+ * Get Stripe publishable key (Candidate)
  * GET /api/candidate/subscriptions/client-token
  */
 async function getClientToken(req, res) {
   try {
-    if (!process.env.BRAINTREE_MERCHANT_ID) {
+    const publishableKey = stripeService.getPublishableKey();
+    if (!publishableKey) {
       return res.status(503).json({
         success: false,
         message: "Payment system is not configured. Please contact support.",
-        error: "Braintree credentials missing",
+        error: "Stripe publishable key missing",
       });
-    }
-
-    const candidateId = req.candidate.candidate_id;
-    const email = req.candidate.email;
-    const fullName = req.candidate.full_name || "";
-
-    // Split full name into first and last names (best-effort)
-    let firstName = fullName.trim();
-    let lastName = "";
-    if (firstName.includes(" ")) {
-      const parts = firstName.split(/\s+/);
-      firstName = parts.shift();
-      lastName = parts.join(" ");
-    }
-
-    // Option A: Auto-provision Braintree customer if not exists
-    try {
-      const found = await braintreeService.findCustomer(candidateId);
-      if (!found?.success || found?.notFound) {
-        const created = await braintreeService.createCustomer({
-          id: String(candidateId),
-          firstName: firstName || undefined,
-          lastName: lastName || undefined,
-          email: email || undefined,
-        });
-
-        if (!created?.success) {
-          return res.status(502).json({
-            success: false,
-            message: "Failed to create payment customer",
-            error: created?.message || "Unknown error",
-            details: created?.errors,
-          });
-        }
-      }
-    } catch (e) {
-      // If creation fails for some reason other than not-found, surface error
-      return res.status(502).json({
-        success: false,
-        message: "Payment service error while preparing customer",
-        error: e.message,
-      });
-    }
-
-    // Now generate a client token bound to this customer. If that fails with not-found, fall back.
-    let clientToken;
-    try {
-      clientToken = await braintreeService.generateClientToken(candidateId);
-    } catch (e) {
-      // Fallback: generate without customerId so frontend can still tokenize
-      clientToken = await braintreeService.generateClientToken();
     }
 
     return res.status(200).json({
       success: true,
-      message: "Client token generated successfully",
-      data: {
-        client_token: clientToken,
-      },
+      message: "Stripe publishable key fetched",
+      data: { client_token: publishableKey },
     });
   } catch (error) {
     logger?.error?.("getClientToken error", { error: error.message });
     return res.status(500).json({
       success: false,
-      message: "Failed to generate client token",
+      message: "Failed to fetch payment configuration",
       error: error.message,
     });
   }
@@ -365,14 +313,6 @@ async function getClientToken(req, res) {
  */
 async function createSubscription(req, res) {
   try {
-    if (!process.env.BRAINTREE_MERCHANT_ID) {
-      return res.status(503).json({
-        success: false,
-        message: "Payment system is not configured. Please contact support.",
-        error: "Braintree credentials missing",
-      });
-    }
-
     const { plan_id, country_ids, payment_method_nonce } = req.body;
     const candidateId = req.candidate.candidate_id;
 
@@ -692,90 +632,6 @@ async function deletePlan(req, res) {
 }
 
 /**
- * Braintree webhook handler - Verification (GET)
- * GET /api/braintree/webhook
- */
-async function verifyWebhook(req, res) {
-  try {
-    const challenge = req.query.bt_challenge;
-    if (!challenge) {
-      return res.status(400).send("Missing bt_challenge");
-    }
-    const verification = await braintreeService.verifyWebhookChallenge(
-      challenge
-    );
-    return res.status(200).send(verification);
-  } catch (error) {
-    logger?.error?.("verifyWebhook error", { error: error.message });
-    return res.status(500).send("Webhook verification failed");
-  }
-}
-
-/**
- * Braintree webhook handler - Notification (POST)
- * POST /api/braintree/webhook
- */
-async function handleWebhook(req, res) {
-  try {
-    const btSignature = req.body.bt_signature;
-    const btPayload = req.body.bt_payload;
-    if (!btSignature || !btPayload) {
-      return res.status(400).send("Missing webhook body");
-    }
-
-    const notification = await braintreeService.parseWebhookNotification(
-      btSignature,
-      btPayload
-    );
-
-    // Handle subscription events
-    const kind = notification.kind;
-    const subscription = notification?.subscription;
-
-    if (subscription?.id) {
-      const { CandidateSubscription, SubscriptionPlan, Candidate } = require("../models");
-      const existing = await CandidateSubscription.findOne({
-        where: { braintree_subscription_id: subscription.id },
-        include: [{ model: SubscriptionPlan, as: "plan" }],
-      });
-
-      if (existing) {
-        let updates = {};
-        switch (kind) {
-          case "subscription_charged_successfully": {
-            // Extend cycle dates and set payment_status completed
-            const currentEnd = new Date(existing.end_date);
-            const startDate = isNaN(currentEnd) ? new Date() : currentEnd;
-            const endDate = new Date(startDate);
-            const durationDays = Number(existing.plan?.duration_days || 30);
-            endDate.setDate(endDate.getDate() + durationDays);
-
-            const perCountry = parseFloat(existing.plan?.price_per_country || 0);
-            const newCycleAmount = parseFloat((perCountry * existing.country_count).toFixed(2));
-
-            updates = {
-              status: "active",
-              payment_status: "completed",
-              start_date: startDate,
-              end_date: endDate,
-              total_amount: newCycleAmount,
-            };
-
-            await existing.update(updates);
-
-            // Also update candidate denormalized fields
-            try {
-              await Candidate.update(
-                {
-                  expiry_date: endDate,
-                  qty: existing.country_count,
-                  unit_price: perCountry,
-                },
-                { where: { candidate_id: existing.candidate_id } }
-              );
-            } catch {}
-            break;
-          }
           case "subscription_canceled": {
             updates = { status: "cancelled" };
             await existing.update(updates);
@@ -809,14 +665,6 @@ async function handleWebhook(req, res) {
  */
 async function addCountries(req, res) {
   try {
-    if (!process.env.BRAINTREE_MERCHANT_ID) {
-      return res.status(503).json({
-        success: false,
-        message: "Payment system is not configured. Please contact support.",
-        error: "Braintree credentials missing",
-      });
-    }
-
     const { subscriptionId } = req.params;
     const candidateId = req.candidate.candidate_id;
 
@@ -917,8 +765,82 @@ module.exports = {
   getSubscription,
   cancelMySubscription,
   // Webhooks
-  verifyWebhook,
-  handleWebhook,
+  // Braintree webhooks removed
+  // Stripe webhook will be registered from routes, implemented below
+  async handleStripeWebhook(req, res) {
+    try {
+      const sig = req.headers["stripe-signature"];
+      if (!sig) return res.status(400).send("Missing Stripe signature");
+
+      const event = stripeService.constructWebhookEvent({
+        payload: req.body, // raw body provided by express.raw()
+        signature: sig,
+      });
+
+      const type = event?.type;
+      const obj = event?.data?.object || {};
+
+      const { CandidateSubscription, SubscriptionPlan, Candidate } = require("../models");
+
+      if (type === "invoice.payment_succeeded") {
+        // On successful renewal invoice, advance cycle
+        const subscriptionId = obj?.subscription;
+        if (subscriptionId) {
+          const existing = await CandidateSubscription.findOne({
+            where: { stripe_subscription_id: subscriptionId },
+            include: [{ model: SubscriptionPlan, as: "plan" }],
+          });
+          if (existing) {
+            const currentEnd = new Date(existing.end_date);
+            const startDate = isNaN(currentEnd) ? new Date() : currentEnd;
+            const endDate = new Date(startDate);
+            const durationDays = Number(existing.plan?.duration_days || 30);
+            endDate.setDate(endDate.getDate() + durationDays);
+
+            const perCountry = parseFloat(existing.plan?.price_per_country || 0);
+            const newCycleAmount = parseFloat((perCountry * existing.country_count).toFixed(2));
+
+            await existing.update({
+              status: "active",
+              payment_status: "completed",
+              start_date: startDate,
+              end_date: endDate,
+              total_amount: newCycleAmount,
+              stripe_latest_invoice_id: obj?.id || existing.stripe_latest_invoice_id,
+            });
+
+            try {
+              await Candidate.update(
+                { expiry_date: endDate, qty: existing.country_count, unit_price: perCountry },
+                { where: { candidate_id: existing.candidate_id } }
+              );
+            } catch {}
+          }
+        }
+      } else if (type === "customer.subscription.deleted") {
+        const subscriptionId = obj?.id;
+        if (subscriptionId) {
+          const existing = await CandidateSubscription.findOne({
+            where: { stripe_subscription_id: subscriptionId },
+          });
+          if (existing) await existing.update({ status: "cancelled" });
+        }
+      } else if (type === "invoice.payment_failed") {
+        const subscriptionId = obj?.subscription;
+        if (subscriptionId) {
+          const existing = await CandidateSubscription.findOne({
+            where: { stripe_subscription_id: subscriptionId },
+          });
+          if (existing) await existing.update({ payment_status: "failed" });
+        }
+      }
+
+      return res.status(200).send("OK");
+    } catch (error) {
+      logger?.error?.("handleStripeWebhook error", { error: error.message });
+      return res.status(400).send(`Webhook Error: ${error.message}`);
+    }
+  },
   // Countries
   addCountries,
   removeCountries,
@@ -956,6 +878,24 @@ module.exports = {
       logger?.error?.("getSubscriptionCountryLists error", { error: error.message });
       const status = error.status || 500;
       return res.status(status).json({ success: false, message: error.message || "Failed to fetch country lists" });
+    }
+  },
+
+  // Admin endpoint to clean up duplicate Stripe products
+  async cleanupDuplicateStripeProducts(req, res) {
+    try {
+      const result = await stripeService.cleanupDuplicateProducts();
+      return res.status(200).json({
+        success: true,
+        message: "Duplicate products cleanup completed",
+        data: result,
+      });
+    } catch (error) {
+      logger?.error?.("cleanupDuplicateStripeProducts error", { error: error.message });
+      return res.status(500).json({ 
+        success: false, 
+        message: error.message || "Failed to cleanup duplicate products" 
+      });
     }
   },
 };

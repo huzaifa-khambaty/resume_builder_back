@@ -1,17 +1,17 @@
 # Subscription System Guide
 
-This document explains the complete subscription system in the backend (`resume_builder_back/`): data models, pricing and proration rules, APIs, Braintree integration, automatic renewals, webhooks, and test scenarios.
+This document explains the complete subscription system in the backend (`resume_builder_back/`): data models, pricing and proration rules, APIs, Stripe integration, automatic renewals, webhooks, and test scenarios.
 
 ## Overview
 
 - The platform sells access per country for a duration defined by a subscription plan.
 - The total price is `price_per_country * country_count`.
-- Candidates purchase via Braintree using the frontend drop-in UI to submit a payment method nonce.
+- Candidates purchase via Stripe using the frontend Stripe Elements UI to submit payment method details.
 - On initial purchase:
   - We charge immediately for the current period (prorated if overlapping an existing active subscription window).
-  - We vault the payment method and create a Braintree subscription for auto-renewal on the next cycle (starting from the current `end_date`).
+  - We create a Stripe subscription for auto-renewal on the next cycle (starting from the current `end_date`).
 - Adding/removing countries mid-cycle adjusts the per-cycle price for the next renewal; adding countries also takes a prorated one-time payment for the remainder of the current cycle.
-- Braintree webhooks advance the subscription cycle, update totals/statuses, and keep the local database in sync.
+- Stripe webhooks advance the subscription cycle, update totals/statuses, and keep the local database in sync.
 
 ## Terminology
 
@@ -24,7 +24,7 @@ This document explains the complete subscription system in the backend (`resume_
 
 - Key services and controllers:
   - `src/services/subscription.service.js`
-  - `src/services/braintree.service.js`
+  - `src/services/stripe.service.js`
   - `src/controllers/subscription.controller.js`
   - `src/routes/subscription.route.js`
 - Webhook routes are wired in `src/routes/index.js`.
@@ -33,15 +33,22 @@ This document explains the complete subscription system in the backend (`resume_
 
 Set the following environment variables (e.g., in `.env`):
 
+**Backend (.env):**
+
 ```
-BRAINTREE_ENVIRONMENT=Sandbox # or Production
-BRAINTREE_MERCHANT_ID=your_merchant_id
-BRAINTREE_PUBLIC_KEY=your_public_key
-BRAINTREE_PRIVATE_KEY=your_private_key
+STRIPE_SECRET_KEY=sk_test_your_secret_key_here
+STRIPE_PUBLISHABLE_KEY=pk_test_your_publishable_key_here
+STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret_here
+```
+
+**Frontend (.env):**
+
+```
+VITE_STRIPE_PUBLISHABLE_KEY=pk_test_your_publishable_key_here
 ```
 
 - Without these, payment functionality is unavailable. The server will log warnings.
-- Webhooks require your server to be reachable by Braintree. For local development, use a tunneling tool (ngrok, Cloudflared, etc.) and set the webhook endpoint in the Braintree Control Panel.
+- Webhooks require your server to be reachable by Stripe. For local development, use a tunneling tool (ngrok, Cloudflared, etc.) and set the webhook endpoint in the Stripe Dashboard.
 
 ## Data Models (DB)
 
@@ -52,14 +59,17 @@ BRAINTREE_PRIVATE_KEY=your_private_key
   - `duration_days` (1–365)
   - `price_per_country` (DECIMAL)
   - `is_active` (bool)
+  - `stripe_price_id` (string, nullable) — Stripe Price ID created when admin creates plan
 
 - `CandidateSubscription` (`src/models/candidate_subscription.model.js`)
 
   - `subscription_id` (UUID)
   - `candidate_id` (UUID)
   - `plan_id` (UUID)
-  - `braintree_subscription_id` (string, nullable) — present when auto-renew is enabled
-  - `braintree_transaction_id` (string, last transaction id)
+  - `stripe_customer_id` (string) — Stripe Customer ID
+  - `stripe_subscription_id` (string, nullable) — present when auto-renew is enabled
+  - `stripe_payment_intent_id` (string) — last PaymentIntent ID
+  - `stripe_price_id` (string) — Stripe Price ID used for this subscription
   - `country_count` (int >= 1)
   - `total_amount` (DECIMAL) — amount for the current cycle
   - `start_date`, `end_date`
@@ -72,12 +82,17 @@ BRAINTREE_PRIVATE_KEY=your_private_key
 
 - Denormalized `Candidate` columns updated for convenience (not authoritative): `payment_gateway`, `subscription_id`, `qty`, `unit_price`, `expiry_date`.
 
-## Braintree Plans and Billing Frequency
+## Stripe Prices and Billing Frequency
 
-- We map `duration_days` to Braintree `billingFrequency` (months):
-  - 30 → 1, 60 → 2, 90 → 3, 180 → 6, 365 → 12 (fallback: round(days/30) and minimum 1)
-- When an admin creates a plan, we attempt to create a Braintree plan via API with the same `plan_id` and the appropriate `billingFrequency`.
-- If programmatic plan creation is not available in your Braintree account, you must manually create plans in the Control Panel with IDs matching our `plan_id`. We log and continue if plan creation fails, but auto-renew requires the plan to exist in Braintree.
+- We map `duration_days` to Stripe recurring intervals:
+  - 30 → monthly (1 month), 60 → monthly (2 months), 90 → monthly (3 months), 180 → monthly (6 months), 365 → yearly (1 year)
+  - Fallback: round(days/30) months with minimum 1 month
+- When an admin creates a plan, we automatically create a Stripe Price via API with:
+  - `unit_amount`: `price_per_country * 100` (cents)
+  - `recurring.interval` and `recurring.interval_count` based on duration mapping
+  - `product_data.name`: plan name
+- The Stripe Price ID is stored in `subscription_plans.stripe_price_id` to prevent duplicate price creation.
+- If Stripe price creation fails during plan creation, we log a warning and continue. The price will be created during the first subscription checkout as a fallback.
 
 ## Pricing and Proration Logic
 
@@ -99,42 +114,42 @@ BRAINTREE_PRIVATE_KEY=your_private_key
 - Endpoint: `POST /api/candidate/subscriptions`
 - Flow (`createCandidateSubscription()`):
   1. Calculate pricing (`calculateSubscriptionPricing()`): validates plan and countries, computes proration if applicable.
-  2. Ensure Braintree customer exists (ID = `candidate_id`).
-  3. Perform one-time transaction using `payment_method_nonce` for the computed amount.
-  4. Create DB `CandidateSubscription` with `status=active`, `payment_status=completed`.
-  5. Vault the payment method using the nonce.
-  6. Create a Braintree subscription with:
-     - `planId = plan_id`
-     - `price = per_cycle_price`
-     - `firstBillingDate = end_date` (auto-renews when the current cycle ends)
-  7. Store `braintree_subscription_id` in DB if creation succeeds.
+  2. Ensure Stripe customer exists (create if needed using candidate email/name).
+  3. Attach payment method to customer using `payment_method_nonce` from frontend.
+  4. Create and confirm PaymentIntent for the computed amount (immediate charge).
+  5. Use existing Stripe Price ID from plan (or create one if missing for old plans).
+  6. Create Stripe subscription with:
+     - `customer`: Stripe customer ID
+     - `items[0].price`: Stripe Price ID
+     - `trial_end`: current `end_date` (auto-renews when the current cycle ends)
+  7. Create DB `CandidateSubscription` with all Stripe IDs and `status=active`, `payment_status=completed`.
 
 ```mermaid
 flowchart TD
-  A[Client gets client token] --> B[Submit payment nonce]
+  A[Frontend Stripe Elements] --> B[Submit payment method]
   B --> C[Backend calculate pricing]
-  C --> D[One-time BT transaction]
-  D --> E[Create DB subscription]
-  E --> F[Vault payment method]
-  F --> G[Create BT subscription for auto-renew]
-  G --> H[Store braintree_subscription_id]
+  C --> D[Create/get Stripe customer]
+  D --> E[Attach payment method]
+  E --> F[Create PaymentIntent & charge]
+  F --> G[Create Stripe subscription]
+  G --> H[Create DB subscription record]
 ```
 
 ### 2) Auto-Renewal
 
-- Braintree charges automatically at `firstBillingDate` and onward per plan frequency.
-- Webhook `subscription_charged_successfully` advances the cycle:
+- Stripe charges automatically at `trial_end` date and onward per plan frequency.
+- Webhook `invoice.payment_succeeded` advances the cycle:
   - New `start_date = previous end_date`
   - New `end_date = previous end_date + duration_days`
   - Set `status=active`, `payment_status=completed`, `total_amount = price_per_country * country_count`
 
 ```mermaid
 sequenceDiagram
-  participant BT as Braintree
+  participant Stripe as Stripe
   participant API as Backend
-  BT->>API: subscription_charged_successfully
+  Stripe->>API: invoice.payment_succeeded
   API->>DB: Update subscription dates, totals, statuses
-  API-->>BT: 200 OK
+  API-->>Stripe: 200 OK
 ```
 
 ### 3) Add Countries Mid-Cycle
@@ -143,9 +158,9 @@ sequenceDiagram
 - Flow (`addCountriesToSubscription()`):
   1. Validate ownership, active status, and non-duplicates.
   2. Compute remaining days and prorate for the additional countries.
-  3. Charge prorated amount (if > 0).
+  3. Charge prorated amount (if > 0) using PaymentIntent.
   4. Update `country_count` and `total_amount`.
-  5. Update Braintree subscription price for next cycle (`updateSubscription({ price })`). If no BT subscription exists yet, vault + create one starting at current `end_date`.
+  5. Update Stripe subscription price for next cycle (modify subscription items). If no Stripe subscription exists yet, create one starting at current `end_date`.
 
 ### 4) Remove Countries Mid-Cycle
 
@@ -154,14 +169,14 @@ sequenceDiagram
   1. Validate ownership and active status.
   2. Ensure at least one country remains (cannot remove all).
   3. Update `country_count`.
-  4. Update Braintree subscription price for next cycle.
+  4. Update Stripe subscription price for next cycle.
 
 ### 5) Cancel Subscription
 
 - Endpoint: `DELETE /api/candidate/subscriptions/:subscriptionId`
 - Flow:
-  1. Cancel Braintree subscription if present.
-  2. Set DB status to `cancelled`. Access continues based on your policy; by default it’s immediate cancellation on our side.
+  1. Cancel Stripe subscription if present.
+  2. Set DB status to `cancelled`. Access continues based on your policy; by default it's immediate cancellation on our side.
 
 ## API Endpoints
 
@@ -169,7 +184,7 @@ sequenceDiagram
 
 - `GET /api/candidate/subscription-plans` — List active plans.
 - `POST /api/candidate/subscriptions/calculate` — Calculate pricing and dates (proration-aware).
-- `GET /api/candidate/subscriptions/client-token` — Get Braintree client token for drop-in UI.
+- `GET /api/candidate/subscriptions/client-token` — Get Stripe publishable key (deprecated - now uses frontend env var).
 - `POST /api/candidate/subscriptions` — Create subscription (requires `payment_method_nonce`).
 - `GET /api/candidate/subscriptions` — Paginated list of candidate’s subscriptions.
 - `GET /api/candidate/subscriptions/:subscriptionId` — Retrieve specific subscription.
@@ -189,8 +204,7 @@ sequenceDiagram
 
 ### Webhooks (No Auth)
 
-- `GET /api/braintree/webhook` — Verification endpoint for Braintree.
-- `POST /api/braintree/webhook` — Receives notifications; we parse and update local status/dates.
+- `POST /api/stripe/webhook` — Receives Stripe webhook notifications; we parse and update local status/dates.
 
 ## Request/Response Examples (cURL)
 
@@ -213,7 +227,7 @@ curl -X POST -H "Content-Type: application/json" -H "Authorization: Bearer <toke
 
 ```
 curl -X POST -H "Content-Type: application/json" -H "Authorization: Bearer <token>" \
-  -d '{"plan_id":"<plan_uuid>","country_ids":["<country_uuid1>"],"payment_method_nonce":"<nonce>"}' \
+  -d '{"plan_id":"<plan_uuid>","country_ids":["<country_uuid1>"],"payment_method_nonce":"<stripe_payment_method_id>"}' \
   http://localhost:3000/api/candidate/subscriptions
 ```
 
@@ -221,7 +235,7 @@ curl -X POST -H "Content-Type: application/json" -H "Authorization: Bearer <toke
 
 ```
 curl -X POST -H "Content-Type: application/json" -H "Authorization: Bearer <token>" \
-  -d '{"country_ids":["<new_country_uuid>"],"payment_method_nonce":"<nonce>"}' \
+  -d '{"country_ids":["<new_country_uuid>"],"payment_method_nonce":"<stripe_payment_method_id>"}' \
   http://localhost:3000/api/candidate/subscriptions/<subscription_id>/add-countries
 ```
 
@@ -244,46 +258,49 @@ curl -X DELETE -H "Authorization: Bearer <token>" \
 
 Handled in `src/controllers/subscription.controller.js`:
 
-- `subscription_charged_successfully`:
+- `invoice.payment_succeeded`:
   - Update DB to extend `end_date` by `plan.duration_days` from the current end, set `status=active`, `payment_status=completed`, update `total_amount` to full cycle.
-- `subscription_canceled`: set `status=cancelled`.
-- `subscription_expired`: set `status=expired`.
-- `subscription_charged_unsuccessfully`: set `payment_status=failed`.
+- `customer.subscription.deleted`: set `status=cancelled`.
+- `invoice.payment_failed`: set `payment_status=failed`.
+- `customer.subscription.updated`: handle subscription modifications.
 
-Note: If available from Braintree, you can switch to using webhook-provided billing period dates for exact `start_date`/`end_date` alignment.
+Note: Stripe webhooks provide exact billing period dates for precise `start_date`/`end_date` alignment.
 
 ## Frontend Integration Notes
 
-- Get client token via `GET /api/candidate/subscriptions/client-token`.
-- Use Braintree Drop-in UI to get `payment_method_nonce`.
-- Submit `nonce` with subscription creation and add-countries calls.
+- Set `VITE_STRIPE_PUBLISHABLE_KEY` in frontend environment variables.
+- Use Stripe Elements to collect payment method details.
+- Create payment method using `stripe.createPaymentMethod()` to get `payment_method_id`.
+- Submit `payment_method_id` as `payment_method_nonce` with subscription creation and add-countries calls.
 - UI may show: selected countries, per-country price, per-cycle total, proration details, and the next renewal date.
 
 ## Testing Scenarios
 
-- No active subscription → create new sub → full charge → BT subscription created with firstBillingDate = `end_date`.
-- Active subscription remaining 10/30 days → create new sub → prorated immediate charge → set `end_date = now + 10d` → BT subscription created for that date.
+- No active subscription → create new sub → full charge → Stripe subscription created with trial_end = `end_date`.
+- Active subscription remaining 10/30 days → create new sub → prorated immediate charge → set `end_date = now + 10d` → Stripe subscription created for that date.
 - Auto-renew webhook success → `end_date` moved forward by `duration_days`; `total_amount` updated.
-- Add countries mid-cycle → immediate prorated charge → next cycle price updated in BT.
-- Remove countries mid-cycle → no immediate charge/refund → next cycle price updated in BT; cannot remove all.
-- Cancel subscription → cancels BT subscription and sets local status to `cancelled`.
+- Add countries mid-cycle → immediate prorated charge → next cycle price updated in Stripe.
+- Remove countries mid-cycle → no immediate charge/refund → next cycle price updated in Stripe; cannot remove all.
+- Cancel subscription → cancels Stripe subscription and sets local status to `cancelled`.
 
 ## Troubleshooting
 
-- Plan not found in Braintree: Create the plan in BT Control Panel with `plan_id` matching our UUID. Ensure `billingFrequency` reflects `duration_days` mapping.
-- Webhook not firing: Ensure your public URL is configured in Braintree and points to `/api/braintree/webhook` (POST). Verify your tunnel and logs.
-- Nonce invalid: Ensure the client token is fresh and the Drop-in UI is initialized correctly for the authenticated candidate.
-- Proration surprises: Confirm `duration_days` and the currently active subscription’s `end_date`—proration is `effective_days / duration_days`.
+- Duplicate Stripe products: Ensure `stripe_price_id` is properly stored when admin creates plans. Run the migration to add the field.
+- Webhook not firing: Ensure your public URL is configured in Stripe Dashboard and points to `/api/stripe/webhook` (POST). Verify your tunnel and logs.
+- Payment method invalid: Ensure Stripe Elements is properly initialized and payment method is created before submission.
+- Proration surprises: Confirm `duration_days` and the currently active subscription's `end_date`—proration is `effective_days / duration_days`.
+- Environment variables: Ensure both backend and frontend have correct Stripe keys configured.
 
 ## Security
 
-- Webhook POST uses Braintree signature verification in `braintree.service.js`.
+- Webhook POST uses Stripe signature verification in `stripe.service.js`.
 - All candidate endpoints require authentication (`checkAuth`).
 - No secrets are logged; sensitive operations have warnings and errors only.
+- Payment methods are securely handled by Stripe - no card details stored locally.
 
 ## Extensibility Ideas
 
-- Add an “Auto-renew” toggle per subscription: if disabled, cancel the BT subscription but keep local access until `end_date`.
+- Add an “Auto-renew” toggle per subscription: if disabled, cancel the Stripe subscription but keep local access until `end_date`.
 - Support multi-currency or country-specific pricing.
 - Email notifications on renewal success/failure.
 - Admin dashboards for renewal health and failed payments.
@@ -291,12 +308,13 @@ Note: If available from Braintree, you can switch to using webhook-provided bill
 ## File Map (Key)
 
 - `src/services/subscription.service.js` — Business logic: pricing, creation, add/remove countries, cancel.
-- `src/services/braintree.service.js` — Braintree integration: token, customer, transaction, subscription CRUD, plan CRUD, webhook helpers.
+- `src/services/stripe.service.js` — Stripe integration: customer, PaymentIntent, subscription CRUD, price CRUD, webhook helpers.
 - `src/controllers/subscription.controller.js` — API handlers and webhook handling.
 - `src/routes/subscription.route.js` — Candidate routes.
 - `src/routes/index.js` — Webhook routes.
 - Models in `src/models/`: `SubscriptionPlan`, `CandidateSubscription`, `SubscriptionCountry`.
+- `src/migrations/20251015120000-add-stripe-price-id-to-subscription-plans.js` — Migration to add Stripe Price ID field.
 
 ---
 
-This README documents the complete mechanism and flow for subscriptions, including Braintree auto-renewal and proration. If you need additional sections or examples (e.g., Postman collection, frontend snippets), let me know and I’ll add them.
+This README documents the complete mechanism and flow for subscriptions, including Stripe auto-renewal and proration. The system has been migrated from Braintree to Stripe for better integration and fewer duplicate products.
