@@ -78,10 +78,27 @@ async function createAndConfirmPaymentIntent({
 
 function mapDurationToRecurring(durationDays) {
   // Map days to Stripe recurring interval + interval_count
-  const days = Number(durationDays) || 30;
-  if (days >= 365) return { interval: "year", interval_count: 1 };
+  // Stripe supports: day (max 365), week (max 52), month (max 12), year (max 1)
+  const days = Math.max(1, Number(durationDays) || 1);
+
+  // Exact daily for short durations
+  if (days < 7) {
+    return { interval: "day", interval_count: days };
+  }
+
+  // Prefer weekly if divisible by 7 and within Stripe limits
+  if (days % 7 === 0 && days / 7 <= 52) {
+    return { interval: "week", interval_count: days / 7 };
+  }
+
+  // Yearly if clean multiples of 365 (Stripe caps interval_count for year at 1)
+  if (days >= 365 && days % 365 === 0) {
+    return { interval: "year", interval_count: 1 };
+  }
+
+  // Fallback to months, bounded to Stripe limits
   const months = Math.max(1, Math.round(days / 30));
-  return { interval: "month", interval_count: months };
+  return { interval: "month", interval_count: Math.min(months, 12) };
 }
 
 async function createPriceForPlan({
