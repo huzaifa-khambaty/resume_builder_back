@@ -9,6 +9,8 @@ const countrySchema = z
   .object({
     country: z.string().min(1).max(255),
     country_code: z.string().min(2).max(10),
+    description: z.string().max(5000).optional().nullable(),
+    sort_order: z.coerce.number().int().positive().optional(),
   })
   .strict();
 
@@ -108,8 +110,10 @@ const countryQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(10),
   search: z.string().optional(),
-  sortBy: z.enum(['country', 'country_code', 'created_at', 'updated_at']).default('created_at'),
-  sortOrder: z.enum(['ASC', 'DESC']).default('DESC'),
+  sortBy: z
+    .enum(['country', 'country_code', 'sort_order', 'created_at', 'updated_at'])
+    .default('sort_order'),
+  sortOrder: z.enum(['ASC', 'DESC']).default('ASC'),
 });
 
 function validateCountryQuery(query) {

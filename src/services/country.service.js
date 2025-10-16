@@ -20,12 +20,14 @@ async function list(options = {}) {
       page: options.page,
       limit: options.limit,
       search: options.search,
-      sortBy: options.sortBy || "created_at",
-      sortOrder: options.sortOrder || "DESC",
+      sortBy: options.sortBy || "sort_order",
+      sortOrder: options.sortOrder || "ASC",
       attributes: [
         "country_id",
         "country",
         "country_code",
+        "description",
+        "sort_order",
         "created_at",
         "updated_at",
       ],
@@ -33,6 +35,7 @@ async function list(options = {}) {
       allowedSortFields: [
         "country",
         "country_code",
+        "sort_order",
         "created_at",
         "updated_at",
       ],
@@ -57,6 +60,8 @@ async function findCountryById(countryId) {
       "country_id",
       "country",
       "country_code",
+      "description",
+      "sort_order",
       "created_at",
       "updated_at",
     ],
@@ -75,6 +80,8 @@ async function findCountryByName(country) {
       "country_id",
       "country",
       "country_code",
+      "description",
+      "sort_order",
       "created_at",
       "updated_at",
     ],
@@ -93,6 +100,8 @@ async function findCountryByCode(countryCode) {
       "country_id",
       "country",
       "country_code",
+      "description",
+      "sort_order",
       "created_at",
       "updated_at",
     ],
@@ -109,10 +118,16 @@ async function findCountryByCode(countryCode) {
  */
 async function createCountry(data, createdBy = null) {
   const countryId = uuidv4();
+  // Determine next sort order automatically
+  const currentMax = await Country.max('sort_order');
+  const nextOrder = (Number.isFinite(currentMax) ? currentMax : 0) + 1;
   const payload = {
     country_id: countryId,
     country: data.country,
     country_code: data.country_code,
+    description: data.description,
+    // Ignore client-provided sort_order. Auto-increment.
+    sort_order: nextOrder,
     created_by: createdBy || countryId,
   };
   return Country.create(payload);
@@ -129,6 +144,8 @@ async function updateCountryById(countryId, data, updatedBy = null) {
   const allowed = {
     country: data.country,
     country_code: data.country_code,
+    description: data.description,
+    // sort_order is system-managed; do not allow manual updates here
     updated_by: updatedBy,
   };
 

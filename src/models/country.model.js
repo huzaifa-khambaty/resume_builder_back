@@ -17,6 +17,15 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         unique: true,
       },
+      description: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      sort_order: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        defaultValue: null,
+      },
       created_at: {
         type: DataTypes.DATE,
         allowNull: false,
