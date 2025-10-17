@@ -16,6 +16,7 @@ const {
   parseResumeFromPdf,
 } = require("../controllers/candidate.controller");
 const { addSimulation } = require("../controllers/simulation.controller");
+const subscriptions = require("./subscription.route");
 
 // Configure multer for file upload (memory storage)
 const upload = multer({
@@ -56,7 +57,7 @@ router.get("/dashboard", checkAuth, getCandidateDashboard);
 router.get("/charts/:job_category_id", checkAuth, getChartsByJobCategory);
 
 // Subscription routes
-router.use("/subscriptions", require("./subscription.route"));
+router.use("/subscriptions", subscriptions);
 
 // Simulations routes
 router.post("/simulations", checkAuth, addSimulation);

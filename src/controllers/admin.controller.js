@@ -1,5 +1,6 @@
 const db = require("../models");
 const logger = require("../config/logger");
+const candidateService = require("../services/candidate.service");
 
 // Sequelize helpers
 const { Op, fn, col, literal } = db.Sequelize;
@@ -69,7 +70,8 @@ async function getDashboardStats(req, res) {
     ]);
 
     // Revenue metrics (sum total_amount where payment_status = completed)
-    const [[{ total_revenue = 0 } = {}],
+    const [
+      [{ total_revenue = 0 } = {}],
       [{ mrr_current = 0 } = {}],
       [{ mrr_previous = 0 } = {}],
     ] = await Promise.all([
@@ -96,7 +98,10 @@ async function getDashboardStats(req, res) {
            AND created_at >= :startPrev AND created_at < :startCurr`,
         {
           type: sequelize.QueryTypes.SELECT,
-          replacements: { startPrev: startOfPrevMonth, startCurr: startOfThisMonth },
+          replacements: {
+            startPrev: startOfPrevMonth,
+            startCurr: startOfThisMonth,
+          },
         }
       ),
     ]);
@@ -121,7 +126,13 @@ async function getDashboardStats(req, res) {
         "country_id",
         [fn("COUNT", col("SubscriptionCountry.id")), "count"],
       ],
-      include: [{ model: Country, as: "country", attributes: ["country_id", "country", "country_code"] }],
+      include: [
+        {
+          model: Country,
+          as: "country",
+          attributes: ["country_id", "country", "country_code"],
+        },
+      ],
       group: ["SubscriptionCountry.country_id", "country.country_id"],
       order: [[literal("count"), "DESC"]],
       limit: 5,
@@ -133,11 +144,36 @@ async function getDashboardStats(req, res) {
         "job_category_id",
         [fn("COUNT", col("Candidate.candidate_id")), "count"],
       ],
-      include: [{ model: JobCategory, as: "job_category", attributes: ["job_category_id", "job_category"] }],
+      include: [
+        {
+          model: JobCategory,
+          as: "job_category",
+          attributes: ["job_category_id", "job_category"],
+        },
+      ],
       where: { job_category_id: { [Op.ne]: null } },
       group: ["Candidate.job_category_id", "job_category.job_category_id"],
       order: [[literal("count"), "DESC"]],
       limit: 5,
+    });
+
+    // Employers by country (Top 10)
+    const employersByCountry = await Employer.findAll({
+      attributes: [
+        "country_id",
+        [fn("COUNT", col("Employer.employer_id")), "count"],
+      ],
+      include: [
+        {
+          model: Country,
+          as: "country",
+          attributes: ["country_id", "country", "country_code"],
+        },
+      ],
+      where: { country_id: { [Op.ne]: null } },
+      group: ["Employer.country_id", "country.country_id"],
+      order: [[literal("count"), "DESC"]],
+      limit: 10,
     });
 
     // Simulations summary
@@ -153,7 +189,15 @@ async function getDashboardStats(req, res) {
     const recentSimulations = await Simulation.findAll({
       order: [["created_at", "DESC"]],
       limit: 5,
-      attributes: ["id", "candidate_id", "country_id", "job_category_id", "no_of_jobs", "short_listed", "created_at"],
+      attributes: [
+        "id",
+        "candidate_id",
+        "country_id",
+        "job_category_id",
+        "no_of_jobs",
+        "short_listed",
+        "created_at",
+      ],
     });
 
     // Recent activity
@@ -166,10 +210,26 @@ async function getDashboardStats(req, res) {
       CandidateSubscription.findAll({
         order: [["created_at", "DESC"]],
         limit: 5,
-        attributes: ["subscription_id", "candidate_id", "plan_id", "total_amount", "status", "payment_status", "created_at"],
+        attributes: [
+          "subscription_id",
+          "candidate_id",
+          "plan_id",
+          "total_amount",
+          "status",
+          "payment_status",
+          "created_at",
+        ],
         include: [
-          { model: Candidate, as: "candidate", attributes: ["candidate_id", "email", "full_name"] },
-          { model: SubscriptionPlan, as: "plan", attributes: ["plan_id", "name"] },
+          {
+            model: Candidate,
+            as: "candidate",
+            attributes: ["candidate_id", "email", "full_name"],
+          },
+          {
+            model: SubscriptionPlan,
+            as: "plan",
+            attributes: ["plan_id", "name"],
+          },
         ],
       }),
     ]);
@@ -183,7 +243,13 @@ async function getDashboardStats(req, res) {
       order: [["end_date", "ASC"]],
       limit: 10,
       attributes: ["subscription_id", "candidate_id", "end_date"],
-      include: [{ model: Candidate, as: "candidate", attributes: ["candidate_id", "email", "full_name"] }],
+      include: [
+        {
+          model: Candidate,
+          as: "candidate",
+          attributes: ["candidate_id", "email", "full_name"],
+        },
+      ],
     });
 
     // Construct response
@@ -215,6 +281,7 @@ async function getDashboardStats(req, res) {
         breakdowns: {
           top_countries_by_subscriptions: topCountries,
           top_categories_by_candidates: topCategories,
+          employers_by_country: employersByCountry,
         },
         recent: {
           candidates: recentCandidates,
@@ -236,4 +303,69 @@ async function getDashboardStats(req, res) {
   }
 }
 
-module.exports = { getDashboardStats };
+/**
+ * GET /api/admin/candidates
+ * Paginated candidates list for admin with search/sort (reuses candidate.service.list)
+ */
+async function getAdminCandidates(req, res) {
+  try {
+    const { page, limit, search, sortBy, sortOrder, country_id, job_category_id, has_resume } = req.query;
+
+    const result = await candidateService.list({
+      page,
+      limit,
+      search,
+      sortBy,
+      sortOrder,
+      country_id,
+      job_category_id,
+      has_resume,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Candidates retrieved successfully",
+      ...result,
+    });
+  } catch (error) {
+    logger?.error?.("getAdminCandidates error", { error: error.message });
+    return res.status(500).json({
+      success: false,
+      message: "Failed to retrieve candidates",
+      error: error.message,
+    });
+  }
+}
+
+/**
+ * GET /api/admin/candidates/:candidateId
+ * Candidate detail for admin
+ */
+async function getAdminCandidateDetail(req, res) {
+  try {
+    const { candidateId } = req.params;
+    const candidate = await candidateService.findCandidateById(candidateId);
+    if (!candidate) {
+      return res.status(404).json({ success: false, message: "Candidate not found" });
+    }
+
+    // Remove sensitive fields if present
+    const json = candidate.toJSON?.() || candidate;
+    const { password, api_token, ...safe } = json;
+
+    return res.status(200).json({
+      success: true,
+      message: "Candidate retrieved successfully",
+      data: safe,
+    });
+  } catch (error) {
+    logger?.error?.("getAdminCandidateDetail error", { error: error.message });
+    const status = error.status || 500;
+    return res.status(status).json({
+      success: false,
+      message: error.message || "Failed to retrieve candidate",
+    });
+  }
+}
+
+module.exports = { getDashboardStats, getAdminCandidates, getAdminCandidateDetail };

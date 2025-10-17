@@ -85,7 +85,7 @@ class PaginationService {
           attributes,
           include,
         }),
-        model.count({ where: finalWhereClause }),
+        model.count({ where: finalWhereClause, include, distinct: true }),
       ]);
 
       const totalPages = Math.ceil(totalCount / perPage);

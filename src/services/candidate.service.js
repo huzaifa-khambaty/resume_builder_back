@@ -160,6 +160,25 @@ async function revokeApiToken(candidateId, token) {
  */
 async function list(options = {}) {
   try {
+    const whereClause = {};
+    if (options.country_id) whereClause.country_id = options.country_id;
+    if (options.job_category_id)
+      whereClause.job_category_id = options.job_category_id;
+    if (options.has_resume === true || options.has_resume === "true") {
+      whereClause.resume_key = { [Op.ne]: null };
+    } else if (options.has_resume === false || options.has_resume === "false") {
+      whereClause.resume_key = null;
+    }
+
+    // Association-aware search: include country and job_category names
+    if (options.search) {
+      const term = String(options.search).trim().replace(/[%_]/g, "\\$&");
+      whereClause[Op.or] = [
+        { "$country.country$": { [Op.iLike]: `%${term}%` } },
+        { "$job_category.job_category$": { [Op.iLike]: `%${term}%` } },
+      ];
+    }
+
     const result = await PaginationService.paginate({
       model: Candidate,
       page: options.page,
@@ -167,6 +186,7 @@ async function list(options = {}) {
       search: options.search,
       sortBy: options.sortBy || "created_at",
       sortOrder: options.sortOrder || "DESC",
+      whereClause,
       attributes: [
         "candidate_id",
         "email",
@@ -174,6 +194,9 @@ async function list(options = {}) {
         "image_url",
         "created_at",
         "updated_at",
+        "country_id",
+        "job_category_id",
+        "resume_key",
       ],
       include: [
         {
@@ -188,7 +211,14 @@ async function list(options = {}) {
         },
       ],
       searchableFields: ["full_name", "email"],
-      allowedSortFields: ["full_name", "email", "created_at", "updated_at"],
+      allowedSortFields: [
+        "full_name",
+        "email",
+        "created_at",
+        "updated_at",
+        "$country.country$",
+        "$job_category.job_category$",
+      ],
       path: "/api/candidates",
     });
 
@@ -401,7 +431,12 @@ async function getJobListForCandidate(candidateId) {
           {
             model: Country,
             as: "country",
-            attributes: ["country_id", "country", "country_code"],
+            attributes: [
+              "country_id",
+              "country",
+              "country_code",
+              "description",
+            ],
           },
         ],
       },
@@ -418,6 +453,7 @@ async function getJobListForCandidate(candidateId) {
       country_id: country.country_id,
       country_code: country.country_code,
       country_name: country.country,
+      description: country.description,
       no_of_jobs: 0,
     };
 
@@ -462,6 +498,7 @@ async function getJobListForCandidate(candidateId) {
         country_id: country.country_id,
         country_code: country.country_code,
         country_name: country.country,
+        description: country.description,
         no_of_jobs: 0,
       });
     }
